@@ -3,6 +3,10 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2023.x+-blue.svg)](https://www.home-assistant.io/)
 
+AKTUELL BEFINDET SICH DIE INTEGRATION NOCH IN DER ENTWICKLUNG!
+Ich kann daher nicht garantieren, dass keine Probleme bestehen, die euer System beeinträchtigen. Ich freue mich über jeden Hinweis.
+
+
 Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **Freiwilligen Feuerwehr** – ohne manuelle Helfer oder Automationen.
 
 ---
