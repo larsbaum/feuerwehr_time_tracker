@@ -1,0 +1,94 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Feuerwehr Zeit-Tracker – Entities",
+        "description": "Wähle die Person, die Zone des Gerätehauses und den Alarm-Sensor.",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Gerätehaus)",
+          "alarm_sensor": "Aktiver Alarm Sensor"
+        }
+      },
+      "probe": {
+        "title": "Probe / Übungs-Einstellungen",
+        "description": "Wann findet die wöchentliche Übung statt?",
+        "data": {
+          "probe_weekday": "Wochentag",
+          "probe_start": "Zeitfenster Start (HH:MM)",
+          "probe_end": "Zeitfenster Ende (HH:MM)",
+          "probe_count_start": "Minuten-Zähler Start (HH:MM)",
+          "probe_count_end": "Minuten-Zähler Ende (HH:MM)"
+        }
+      },
+      "einsatz": {
+        "title": "Einsatz & Benachrichtigungen",
+        "description": "Einstellungen für Einsatz-Tracking und optionale Push-Benachrichtigungen.",
+        "data": {
+          "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "notify_service": "Notify Service (optional, z.B. notify.mobile_app_iphone)"
+        }
+      }
+    },
+    "error": {
+      "no_person": "Keine Person-Entity gefunden. Bitte zuerst eine Person in HA anlegen.",
+      "no_zone": "Keine Zone-Entity gefunden. Bitte zuerst eine Zone in HA anlegen."
+    },
+    "abort": {
+      "already_configured": "Integration ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Einstellungen anpassen",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Gerätehaus)",
+          "alarm_sensor": "Aktiver Alarm Sensor",
+          "probe_weekday": "Probe-Wochentag",
+          "probe_start": "Probe-Zeitfenster Start",
+          "probe_end": "Probe-Zeitfenster Ende",
+          "probe_count_start": "Minuten-Zähler Start",
+          "probe_count_end": "Minuten-Zähler Ende",
+          "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "notify_service": "Notify Service (optional)"
+        }
+      }
+    }
+  },
+  "services": {
+    "reset": {
+      "name": "Stunden zurücksetzen",
+      "description": "Setzt eine oder alle Kategorien auf 0 zurück.",
+      "fields": {
+        "category": {
+          "name": "Kategorie",
+          "description": "einsatz | probe | geratehaus | all"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Nur bei mehreren Instanzen nötig."
+        }
+      }
+    },
+    "add_minutes": {
+      "name": "Minuten hinzufügen / abziehen",
+      "description": "Fügt Minuten zu einer Kategorie hinzu (negative Werte ziehen ab).",
+      "fields": {
+        "category": {
+          "name": "Kategorie",
+          "description": "einsatz | probe | geratehaus"
+        },
+        "minutes": {
+          "name": "Minuten",
+          "description": "Anzahl Minuten (negativ zum Abziehen)"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Nur bei mehreren Instanzen nötig."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+reset:
+  name: Stunden zurücksetzen
+  description: Setzt eine oder alle Kategorien auf 0 zurück.
+  fields:
+    category:
+      name: Kategorie
+      description: "Welche Kategorie zurücksetzen: einsatz | probe | geratehaus | all"
+      required: true
+      selector:
+        select:
+          options:
+            - einsatz
+            - probe
+            - geratehaus
+            - all
+    entry_id:
+      name: Entry ID (optional)
+      description: Nur bei mehreren Instanzen der Integration nötig.
+      required: false
+      selector:
+        text:
+
+add_minutes:
+  name: Minuten hinzufügen / abziehen
+  description: Fügt Minuten zu einer Kategorie hinzu. Negative Werte ziehen Minuten ab.
+  fields:
+    category:
+      name: Kategorie
+      description: "Ziel-Kategorie: einsatz | probe | geratehaus"
+      required: true
+      selector:
+        select:
+          options:
+            - einsatz
+            - probe
+            - geratehaus
+    minutes:
+      name: Minuten
+      description: Anzahl Minuten (negativ zum Abziehen, Minimum ist 0)
+      required: true
+      selector:
+        number:
+          min: -99999
+          max: 99999
+          step: 1
+          mode: box
+    entry_id:
+      name: Entry ID (optional)
+      description: Nur bei mehreren Instanzen der Integration nötig.
+      required: false
+      selector:
+        text:

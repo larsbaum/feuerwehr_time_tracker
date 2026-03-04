@@ -1,0 +1,94 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Feuerwehr Zeit-Tracker – Entities",
+        "description": "Select the person to track, the fire station zone, and the active alarm sensor.",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Fire Station)",
+          "alarm_sensor": "Active Alarm Sensor"
+        }
+      },
+      "probe": {
+        "title": "Exercise / Training Settings",
+        "description": "When does the weekly training take place?",
+        "data": {
+          "probe_weekday": "Weekday",
+          "probe_start": "Time window start (HH:MM)",
+          "probe_end": "Time window end (HH:MM)",
+          "probe_count_start": "Minute counter start (HH:MM)",
+          "probe_count_end": "Minute counter end (HH:MM)"
+        }
+      },
+      "einsatz": {
+        "title": "Deployment & Notifications",
+        "description": "Settings for deployment tracking and optional push notifications.",
+        "data": {
+          "einsatz_max_hours": "Max. deployment duration (hours)",
+          "notify_service": "Notify service (optional, e.g. notify.mobile_app_iphone)"
+        }
+      }
+    },
+    "error": {
+      "no_person": "No person entity found. Please create a person in HA first.",
+      "no_zone": "No zone entity found. Please create a zone in HA first."
+    },
+    "abort": {
+      "already_configured": "Integration is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Adjust Settings",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Fire Station)",
+          "alarm_sensor": "Active Alarm Sensor",
+          "probe_weekday": "Training weekday",
+          "probe_start": "Training time window start",
+          "probe_end": "Training time window end",
+          "probe_count_start": "Minute counter start",
+          "probe_count_end": "Minute counter end",
+          "einsatz_max_hours": "Max. deployment duration (hours)",
+          "notify_service": "Notify service (optional)"
+        }
+      }
+    }
+  },
+  "services": {
+    "reset": {
+      "name": "Reset hours",
+      "description": "Resets one or all categories to zero.",
+      "fields": {
+        "category": {
+          "name": "Category",
+          "description": "einsatz | probe | geratehaus | all"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Only needed when multiple instances are configured."
+        }
+      }
+    },
+    "add_minutes": {
+      "name": "Add / subtract minutes",
+      "description": "Adds minutes to a category (negative values subtract).",
+      "fields": {
+        "category": {
+          "name": "Category",
+          "description": "einsatz | probe | geratehaus"
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "Number of minutes (negative to subtract)"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Only needed when multiple instances are configured."
+        }
+      }
+    }
+  }
+}
