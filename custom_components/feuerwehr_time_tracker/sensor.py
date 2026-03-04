@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import logging
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, DeviceEntryType
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -34,7 +34,7 @@ async def async_setup_entry(
         name="Feuerwehr Zeit-Tracker",
         manufacturer="HACS Community",
         model="Zeit-Tracker",
-        entry_type="service",
+        entry_type=DeviceEntryType.SERVICE,
     )
 
     sensors = [
