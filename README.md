@@ -15,9 +15,10 @@ Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **
 
 | Kategorie | Tracking-Methode |
 |-----------|-----------------|
-| 🚨 **Einsatz** | Zone verlassen bei aktivem Alarm → Zeit beim Zurückkommen addieren |
+| 🚨 **Einsatz** | Alarm aktiv + in der Zone → Einsatz-Minuten. Zone verlassen bei aktivem Alarm → Zeit beim Zurückkommen addieren |
 | 🧑‍🚒 **Probe / Übung** | Wöchentlicher Tag + Zeitfenster (außerhalb und innerhalb der Zone) |
-| 🏠 **Gerätehaus** | Minuten-Zähler bei Anwesenheit (alle anderen Zeiten) |
+| 🏠 **Gerätehaus** | Minuten-Zähler bei Anwesenheit (alle anderen Zeiten, kein aktiver Alarm) |
+| 📊 **Gesamt** | Summe aus Einsatz + Probe + Gerätehaus |
 
 - Keine manuellen Helfer (`input_number`, `input_datetime`) nötig
 - Keine manuellen Automationen nötig
@@ -78,6 +79,7 @@ Nach der Einrichtung erstellt die Integration automatisch:
 | `sensor.alarm_hours` | Gesamt-Einsatzstunden | h |
 | `sensor.training_hours` | Gesamt-Probestunden | h |
 | `sensor.station_hours` | Sonstige Gerätehaus-Stunden | h |
+| `sensor.total_hours` | Gesamtstunden (Summe aller Kategorien) | h |
 
 Alle Sensoren haben zusätzlich ein `minutes`-Attribut für präzise Auswertungen.
 
@@ -118,10 +120,7 @@ entities:
     name: 🧑‍🚒 Probe
   - entity: sensor.station_hours
     name: 🏠 Gerätehaus
+  - entity: sensor.total_hours
+    name: 📊 Gesamt
 ```
 
----
-
-## 📄 Lizenz
-
-MIT License – Verwendung, Weitergabe und Anpassung frei erlaubt.
