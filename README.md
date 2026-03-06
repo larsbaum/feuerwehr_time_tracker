@@ -13,12 +13,31 @@ Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **
 
 ## ✨ Features
 
-| Kategorie | Tracking-Methode |
-|-----------|-----------------|
-| 🚨 **Einsatz** | Alarm aktiv + in der Zone → Einsatz-Minuten. Zone verlassen bei aktivem Alarm → Zeit beim Zurückkommen addieren |
-| 🧑‍🚒 **Probe / Übung** | Wöchentlicher Tag + Zeitfenster (außerhalb und innerhalb der Zone) |
-| 🏠 **Gerätehaus** | Minuten-Zähler bei Anwesenheit (alle anderen Zeiten, kein aktiver Alarm) |
-| 📊 **Gesamt** | Summe aus Einsatz + Probe + Gerätehaus |
+### 🚨 Einsatz
+
+Erfasst automatisch alle Stunden rund um einen aktiven Alarm.
+
+- **Auf der Wache bei Alarm:** Solange der Alarm-Sensor aktiv (`on`) ist und du dich in der Gerätehaus-Zone befindest, werden die Minuten als Einsatz gezählt – nicht als Gerätehaus.
+- **Wache verlassen bei Alarm:** Wenn du die Zone bei aktivem Alarm verlässt (z.B. zum Einsatzort fährst), wird ein Zeitstempel gesetzt. Sobald du zurückkehrst, wird die gesamte Abwesenheitszeit als Einsatz-Minuten addiert.
+- **Nicht am Gerätehaus bei Alarm:** Wenn du bei einem Alarm gar nicht zum Gerätehaus kommst (z.B. daheim bleibst), werden keine Einsatz-Minuten gezählt.
+
+### 🧑‍🚒 Probe / Übung
+
+Erfasst automatisch Übungsstunden am konfigurierten Wochentag.
+
+- **Anwesenheit im Gerätehaus:** Innerhalb des Probe-Zählfensters (z.B. 19:00–23:00) werden Minuten in der Zone als Probe gezählt – sofern kein Alarm aktiv ist.
+- **Abwesenheit während der Probe:** Verlässt du die Zone innerhalb des Probe-Zeitfensters (z.B. 17:00–23:59) ohne aktiven Alarm, wird die Abwesenheitszeit beim Zurückkommen als Probe-Minuten addiert (z.B. für Übungen außerhalb des Gerätehauses).
+
+### 🏠 Gerätehaus
+
+Erfasst alle sonstigen Stunden, die du im Gerätehaus verbringst.
+
+- Jede Minute, die du in der Zone bist und **kein** Alarm aktiv ist und **kein** Probe-Zeitfenster greift, wird als Gerätehaus-Stunde gezählt.
+- Typische Beispiele: Fahrzeugpflege, Gerätewartung, Kameradschaftsabende außerhalb des Probe-Tags.
+
+### 📊 Gesamt
+
+Zeigt die Summe aller drei Kategorien (Einsatz + Probe + Gerätehaus) als Gesamtstunden an.
 
 - Keine manuellen Helfer (`input_number`, `input_datetime`) nötig
 - Keine manuellen Automationen nötig
