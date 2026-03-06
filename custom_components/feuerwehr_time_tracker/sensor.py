@@ -14,6 +14,7 @@ from .const import (
     SENSOR_EINSATZ,
     SENSOR_PROBE,
     SENSOR_GERATEHAUS,
+    SENSOR_GESAMT,
     CONF_PERSON,
 )
 from .coordinator import FeuerwehrCoordinator
@@ -63,6 +64,14 @@ async def async_setup_entry(
             icon="mdi:home-group",
             device_info=device_info,
         ),
+        FeuerwehrSensor(
+            coordinator=coordinator,
+            entry_id=entry.entry_id,
+            category=SENSOR_GESAMT,
+            name="Total Hours",
+            icon="mdi:sigma",
+            device_info=device_info,
+        ),
     ]
 
     async_add_entities(sensors)
@@ -98,6 +107,7 @@ class FeuerwehrSensor(SensorEntity):
             SENSOR_EINSATZ: self._coordinator.einsatz_minutes,
             SENSOR_PROBE: self._coordinator.probe_minutes,
             SENSOR_GERATEHAUS: self._coordinator.geratehaus_minutes,
+            SENSOR_GESAMT: self._coordinator.gesamt_minutes,
         }.get(self._category, 0)
         return round(minutes / 60, 2)
 
@@ -107,6 +117,7 @@ class FeuerwehrSensor(SensorEntity):
             SENSOR_EINSATZ: self._coordinator.einsatz_minutes,
             SENSOR_PROBE: self._coordinator.probe_minutes,
             SENSOR_GERATEHAUS: self._coordinator.geratehaus_minutes,
+            SENSOR_GESAMT: self._coordinator.gesamt_minutes,
         }.get(self._category, 0)
         return {
             "minutes": minutes,

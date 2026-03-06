@@ -30,6 +30,7 @@ DATA_PROBE_STARTED = "probe_started"       # timestamp float or None
 SENSOR_EINSATZ = "einsatz"
 SENSOR_PROBE = "probe"
 SENSOR_GERATEHAUS = "geratehaus"
+SENSOR_GESAMT = "gesamt"
 
 # Services
 SERVICE_RESET = "reset"

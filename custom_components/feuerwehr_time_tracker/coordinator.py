@@ -105,9 +105,27 @@ class FeuerwehrCoordinator:
     def geratehaus_minutes(self) -> int:
         return int(self._data.get(DATA_GERATEHAUS_MINUTES, 0))
 
+    @property
+    def gesamt_minutes(self) -> int:
+        return self.einsatz_minutes + self.probe_minutes + self.geratehaus_minutes
+
     def get_cfg(self, key: str, default=None):
         """Get effective config value (options override data)."""
         return self.config.get(key, default)
+
+    def _get_zone_name(self) -> str:
+        """Get the zone name as it appears in person.state.
+
+        HA's person entity sets its state to zone_state.name (the friendly
+        name), NOT the entity-id slug.  We must compare against the same
+        value, otherwise the zone check silently fails.
+        """
+        zone_entity_id = self.get_cfg(CONF_ZONE, "")
+        zone_state = self.hass.states.get(zone_entity_id)
+        if zone_state:
+            return zone_state.name
+        # Fallback when state object is unavailable
+        return zone_entity_id.replace("zone.", "")
 
     # ------------------------------------------------------------------
     # Setup / Teardown
@@ -152,7 +170,7 @@ class FeuerwehrCoordinator:
         if not old_state or not new_state:
             return
 
-        zone = self.get_cfg(CONF_ZONE, "").replace("zone.", "")
+        zone = self._get_zone_name()
         alarm = self.get_cfg(CONF_ALARM, "")
         now = dt_util.now()
 
@@ -250,7 +268,7 @@ class FeuerwehrCoordinator:
     def _handle_minute_tick(self, _now: datetime) -> None:
         """Every minute: if person is in zone, increment appropriate counter."""
         person = self.get_cfg(CONF_PERSON)
-        zone = self.get_cfg(CONF_ZONE, "").replace("zone.", "")
+        zone = self._get_zone_name()
         alarm = self.get_cfg(CONF_ALARM, "")
         probe_weekday = self.get_cfg(CONF_PROBE_WEEKDAY, "tue")
         probe_count_start = self.get_cfg(CONF_PROBE_COUNT_START, "19:00")
@@ -265,10 +283,13 @@ class FeuerwehrCoordinator:
 
         now = dt_util.now()
 
+        # Einsatz: alarm active → count as Einsatz, not Gerätehaus
+        if alarm_on:
+            self._data[DATA_EINSATZ_MINUTES] = int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + 1
+            _LOGGER.debug("Einsatz minute tick (in zone): total=%d", self._data[DATA_EINSATZ_MINUTES])
         # Probe counting: correct weekday + count window + alarm OFF
-        if (
-            not alarm_on
-            and _is_probe_weekday(now, probe_weekday)
+        elif (
+            _is_probe_weekday(now, probe_weekday)
             and _in_time_window(now, probe_count_start, probe_count_end)
         ):
             self._data[DATA_PROBE_MINUTES] = int(self._data.get(DATA_PROBE_MINUTES, 0)) + 1
