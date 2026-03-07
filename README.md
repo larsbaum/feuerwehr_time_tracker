@@ -3,11 +3,11 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2023.x+-blue.svg)](https://www.home-assistant.io/)
 
-AKTUELL BEFINDET SICH DIE INTEGRATION NOCH IN DER ENTWICKLUNG!
+**AKTUELL BEFINDET SICH DIE INTEGRATION NOCH IN DER ENTWICKLUNG!**
 Ich kann daher nicht garantieren, dass keine Probleme bestehen, die euer System beeinträchtigen. Ich freue mich über jeden Hinweis.
 
-
-Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **Freiwilligen Feuerwehr** – ohne manuelle Helfer oder Automationen.
+---
+Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **Freiwilligen Feuerwehr** – perfekt in zusammenarbeit mit Integrationen wie Divera o.ä.
 
 ---
 
@@ -17,16 +17,16 @@ Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **
 
 Erfasst automatisch alle Stunden rund um einen aktiven Alarm.
 
-- **Auf der Wache bei Alarm:** Solange der Alarm-Sensor aktiv (`on`) ist und du dich in der Gerätehaus-Zone befindest, werden die Minuten als Einsatz gezählt – nicht als Gerätehaus.
+- **Auf der Wache bei Alarm:** Solange der Alarm-Sensor (zum Beispiel von der Divera-Intergration) aktiv ist und du dich in der Gerätehaus-Zone befindest, werden die Minuten als Einsatz gezählt.
 - **Wache verlassen bei Alarm:** Wenn du die Zone bei aktivem Alarm verlässt (z.B. zum Einsatzort fährst), wird ein Zeitstempel gesetzt. Sobald du zurückkehrst, wird die gesamte Abwesenheitszeit als Einsatz-Minuten addiert.
-- **Nicht am Gerätehaus bei Alarm:** Wenn du bei einem Alarm gar nicht zum Gerätehaus kommst (z.B. daheim bleibst), werden keine Einsatz-Minuten gezählt.
+- **Nicht am Gerätehaus bei Alarm:** Wenn du bei einem aktiven Alarm gar nicht zum Gerätehaus kommst (z.B. daheim bleibst), werden keine Einsatz-Minuten gezählt.
 
 ### 🧑‍🚒 Probe / Übung
 
 Erfasst automatisch Übungsstunden am konfigurierten Wochentag.
 
 - **Anwesenheit im Gerätehaus:** Innerhalb des Probe-Zählfensters (z.B. 19:00–23:00) werden Minuten in der Zone als Probe gezählt – sofern kein Alarm aktiv ist.
-- **Abwesenheit während der Probe:** Verlässt du die Zone innerhalb des Probe-Zeitfensters (z.B. 17:00–23:59) ohne aktiven Alarm, wird die Abwesenheitszeit beim Zurückkommen als Probe-Minuten addiert (z.B. für Übungen außerhalb des Gerätehauses).
+- **Abwesenheit während der Probe:** Verlässt du die Zone innerhalb eines festgelegten Probe-Zeitfensters (z.B. 17:00–23:59) ohne aktiven Alarm, wird die Abwesenheitszeit beim Zurückkommen als Probe-Minuten addiert (z.B. für Übungen außerhalb des Gerätehauses).
 
 ### 🏠 Gerätehaus
 
@@ -39,12 +39,19 @@ Erfasst alle sonstigen Stunden, die du im Gerätehaus verbringst.
 
 Zeigt die Summe aller drei Kategorien (Einsatz + Probe + Gerätehaus) als Gesamtstunden an.
 
+___
+
+### 💡 Vorteile
+
 - Keine manuellen Helfer (`input_number`, `input_datetime`) nötig
 - Keine manuellen Automationen nötig
 - Vollständig über die HA-Oberfläche konfigurierbar
-- Persistente Speicherung (übersteht HA-Neustarts)
 - Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende
 - Services zum Zurücksetzen oder manuellen Korrigieren
+
+### ❗️ Voraussetzungen
+- Sensor der einen aktiven Alarm anzeigt (z.B. über Divera-Integration)
+- Standorterkennung über Zonen (Gerätehaus-Zone)
 
 ---
 
@@ -52,7 +59,7 @@ Zeigt die Summe aller drei Kategorien (Einsatz + Probe + Gerätehaus) als Gesamt
 
 1. HACS in Home Assistant öffnen
 2. **Integrationen** → Drei-Punkte-Menü → **Benutzerdefiniertes Repository hinzufügen**
-3. URL eingeben: `https://github.com/your-username/feuerwehr_time_tracker`
+3. URL eingeben: `https://github.com/larsbaum/feuerwehr_time_tracker`
 4. Kategorie: **Integration**
 5. Auf **Hinzufügen** klicken, dann die Integration installieren
 6. Home Assistant neu starten
