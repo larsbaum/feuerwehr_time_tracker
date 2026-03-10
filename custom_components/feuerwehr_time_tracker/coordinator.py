@@ -213,21 +213,29 @@ class FeuerwehrCoordinator:
     def _on_zone_enter(self, now: datetime) -> None:
         """Handle zone enter: calculate and add minutes if applicable."""
         max_hours = self.get_cfg(CONF_EINSATZ_MAX_HOURS, 10)
+        alarm_entity = self.get_cfg(CONF_ALARM, "")
+        alarm_state = self.hass.states.get(alarm_entity)
+        alarm_on = alarm_state and alarm_state.state == "on"
 
         # --- Einsatz ---
         einsatz_started = self._data.get(DATA_EINSATZ_STARTED)
         if einsatz_started:
-            elapsed = now.timestamp() - einsatz_started
-            if 0 < elapsed <= max_hours * 3600:
-                delta = int(elapsed / 60)
-                self._data[DATA_EINSATZ_MINUTES] = (
-                    int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + delta
-                )
-                _LOGGER.info("Einsatz: added %d min (total: %d min)", delta, self._data[DATA_EINSATZ_MINUTES])
-                self._maybe_notify(
-                    "🚒 Einsatz beendet",
-                    f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_EINSATZ_MINUTES] / 60:.1f}h"
-                )
+            if alarm_on:
+                # Alarm still active → add elapsed minutes
+                elapsed = now.timestamp() - einsatz_started
+                if 0 < elapsed <= max_hours * 3600:
+                    delta = int(elapsed / 60)
+                    self._data[DATA_EINSATZ_MINUTES] = (
+                        int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + delta
+                    )
+                    _LOGGER.info("Einsatz: added %d min (total: %d min)", delta, self._data[DATA_EINSATZ_MINUTES])
+                    self._maybe_notify(
+                        "🚒 Einsatz beendet",
+                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_EINSATZ_MINUTES] / 60:.1f}h"
+                    )
+            else:
+                _LOGGER.info("Einsatz: alarm no longer active, discarding %d sec absence",
+                             int(now.timestamp() - einsatz_started))
             self._data[DATA_EINSATZ_STARTED] = None
 
         # --- Probe (absence tracking) ---
