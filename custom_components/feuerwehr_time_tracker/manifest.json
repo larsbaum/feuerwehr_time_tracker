@@ -1,7 +1,7 @@
 {
   "domain": "feuerwehr_time_tracker",
   "name": "Feuerwehr Zeit-Tracker",
-  "version": "0.1.4",
+  "version": "0.1.3",
   "config_flow": true,
   "dependencies": [],
   "requirements": [],
