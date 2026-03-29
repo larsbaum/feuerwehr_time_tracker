@@ -23,10 +23,31 @@ Erfasst automatisch alle Stunden rund um einen aktiven Alarm.
 
 ### 🧑‍🚒 Probe / Übung
 
-Erfasst automatisch Übungsstunden am konfigurierten Wochentag.
+Erfasst automatisch Übungsstunden – flexibel per festem Wochentag, Kalender oder beidem.
+
+Du kannst zwischen drei Modi wählen:
+
+| Modus | Probe aktiv wenn… |
+|-------|-------------------|
+| **Tag & Zeit** | Konfigurierter Wochentag + Zeitfenster (klassisch) |
+| **Kalender** | Ein Kalender-Ereignis aktiv ist, das ein Schlagwort enthält |
+| **Beides** | Tag & Zeit **oder** Kalender – eines von beiden reicht aus |
+
+#### Tag & Zeit (klassisch)
 
 - **Anwesenheit im Gerätehaus:** Innerhalb des Probe-Zählfensters (z.B. 19:00–23:00) werden Minuten in der Zone als Probe gezählt – sofern kein Alarm aktiv ist.
 - **Abwesenheit während der Probe:** Verlässt du die Zone innerhalb eines festgelegten Probe-Zeitfensters (z.B. 17:00–23:59) ohne aktiven Alarm, wird die Abwesenheitszeit beim Zurückkommen als Probe-Minuten addiert (z.B. für Übungen außerhalb des Gerätehauses).
+
+#### Kalender
+
+- Statt eines festen Wochentags wird eine **Kalender-Entität** überwacht (z.B. ein Google- oder CalDAV-Kalender).
+- Du gibst **Schlagwörter** ein (kommagetrennt, z.B. `Probe,Übung,Training`). Sobald ein Kalender-Ereignis aktiv ist, dessen Titel eines der Schlagwörter enthält, wird Probe-Tracking aktiviert.
+- Ohne Schlagwörter zählt **jedes** aktive Ereignis.
+- Vorteil: Unregelmäßige oder verschobene Proben werden automatisch erkannt.
+
+#### Beides (Tag & Zeit + Kalender)
+
+- Kombiniert beide Methoden. Die feste Probe am Wochentag wird **immer** getrackt, zusätzlich greifen Kalender-Ereignisse für Sondertermine.
 
 ### 🏠 Gerätehaus
 
@@ -46,12 +67,14 @@ ___
 - Keine manuellen Helfer (`input_number`, `input_datetime`) nötig
 - Keine manuellen Automationen nötig
 - Vollständig über die HA-Oberfläche konfigurierbar
+- Flexible Probe-Erkennung: fester Wochentag, Kalender oder beides
 - Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende
 - Services zum Zurücksetzen oder manuellen Korrigieren
 
 ### ❗️ Voraussetzungen
 - Sensor der einen aktiven Alarm anzeigt (z.B. über Divera-Integration)
 - Standorterkennung über Zonen (Gerätehaus-Zone)
+- *Für Kalender-Modus:* Eine Kalender-Integration in Home Assistant (z.B. Google Calendar, CalDAV, Local Calendar)
 
 ---
 
@@ -70,7 +93,7 @@ ___
 
 1. **Einstellungen → Geräte & Dienste → Integration hinzufügen**
 2. Nach *Feuerwehr Zeit-Tracker* suchen
-3. Den 3-Schritt-Assistenten durchlaufen:
+3. Den Assistenten durchlaufen:
 
 ### Schritt 1 – Entities
 | Feld | Beispiel |
@@ -79,7 +102,15 @@ ___
 | Zone (Gerätehaus) | `zone.feuerwehrgeratehaus` |
 | Aktiver Alarm Sensor | `binary_sensor.aktiver_alarm` |
 
-### Schritt 2 – Probe / Übung
+### Schritt 2 – Probe-Modus wählen
+
+| Modus | Beschreibung |
+|-------|-------------|
+| Tag & Zeit | Fester Wochentag mit Zeitfenstern (klassisch) |
+| Kalender | Kalender-Entität mit Schlagwörtern |
+| Beides | Tag & Zeit + Kalender kombiniert |
+
+### Schritt 3a – Tag & Zeit *(nur bei „Tag & Zeit" oder „Beides")*
 | Feld | Beschreibung | Standard |
 |------|-------------|---------|
 | Wochentag | Dienstag | `tue` |
@@ -88,7 +119,13 @@ ___
 | Minuten-Zähler Start | Ab wann werden Minuten im Gerätehaus als Probe gezählt | `19:00` |
 | Minuten-Zähler Ende | Bis wann | `23:00` |
 
-### Schritt 3 – Einsatz & Benachrichtigungen
+### Schritt 3b – Kalender *(nur bei „Kalender" oder „Beides")*
+| Feld | Beschreibung | Beispiel |
+|------|-------------|---------|
+| Kalender-Entität | Die zu überwachende Kalender-Entität | `calendar.feuerwehr` |
+| Schlagwörter | Kommagetrennte Begriffe, die im Event-Titel vorkommen müssen | `Probe,Übung,Training` |
+
+### Schritt 4 – Einsatz & Benachrichtigungen
 | Feld | Beschreibung | Standard |
 |------|-------------|---------|
 | Max. Einsatzdauer | Zeitfenster für gültige Rückkehr (Stunden) | `10` |
@@ -149,4 +186,3 @@ entities:
   - entity: sensor.total_hours
     name: 📊 Gesamt
 ```
-

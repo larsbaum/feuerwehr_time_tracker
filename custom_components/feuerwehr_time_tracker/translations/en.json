@@ -10,8 +10,15 @@
           "alarm_sensor": "Active Alarm Sensor"
         }
       },
+      "probe_mode": {
+        "title": "Training Mode",
+        "description": "How should training sessions be detected?",
+        "data": {
+          "probe_mode": "Mode"
+        }
+      },
       "probe": {
-        "title": "Exercise / Training Settings",
+        "title": "Exercise / Training Settings (Day & Time)",
         "description": "When does the weekly training take place?",
         "data": {
           "probe_weekday": "Weekday",
@@ -19,6 +26,33 @@
           "probe_end": "Time window end (HH:MM)",
           "probe_count_start": "Minute counter start (HH:MM)",
           "probe_count_end": "Minute counter end (HH:MM)"
+        }
+      },
+      "probe_calendar": {
+        "title": "Exercise / Training Settings (Calendar)",
+        "description": "Select a calendar entity and enter keywords (comma-separated). When a calendar event is active that contains one of the keywords, time will be tracked as training.",
+        "data": {
+          "probe_calendar_entity": "Calendar Entity",
+          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)"
+        }
+      },
+      "probe_both_day_time": {
+        "title": "Training – Day & Time Settings",
+        "description": "First configure the fixed training times. Calendar settings follow in the next step.",
+        "data": {
+          "probe_weekday": "Weekday",
+          "probe_start": "Time window start (HH:MM)",
+          "probe_end": "Time window end (HH:MM)",
+          "probe_count_start": "Minute counter start (HH:MM)",
+          "probe_count_end": "Minute counter end (HH:MM)"
+        }
+      },
+      "probe_both_calendar": {
+        "title": "Training – Calendar Settings",
+        "description": "In addition to fixed times: calendar events with keywords also trigger training tracking.",
+        "data": {
+          "probe_calendar_entity": "Calendar Entity",
+          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)"
         }
       },
       "einsatz": {
@@ -32,7 +66,8 @@
     },
     "error": {
       "no_person": "No person entity found. Please create a person in HA first.",
-      "no_zone": "No zone entity found. Please create a zone in HA first."
+      "no_zone": "No zone entity found. Please create a zone in HA first.",
+      "no_calendar": "No calendar entity found. Please set up a calendar in HA first."
     },
     "abort": {
       "already_configured": "Integration is already configured."
@@ -41,7 +76,14 @@
   "options": {
     "step": {
       "init": {
-        "title": "Adjust Settings",
+        "title": "Choose Training Mode",
+        "description": "How should training sessions be detected?",
+        "data": {
+          "probe_mode": "Mode"
+        }
+      },
+      "options_day_time": {
+        "title": "Adjust Settings (Day & Time)",
         "data": {
           "person_entity": "Person",
           "zone_entity": "Zone (Fire Station)",
@@ -51,6 +93,35 @@
           "probe_end": "Training time window end",
           "probe_count_start": "Minute counter start",
           "probe_count_end": "Minute counter end",
+          "einsatz_max_hours": "Max. deployment duration (hours)",
+          "notify_service": "Notify service (optional)"
+        }
+      },
+      "options_calendar": {
+        "title": "Adjust Settings (Calendar)",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Fire Station)",
+          "alarm_sensor": "Active Alarm Sensor",
+          "probe_calendar_entity": "Calendar Entity",
+          "probe_keywords": "Keywords (comma-separated)",
+          "einsatz_max_hours": "Max. deployment duration (hours)",
+          "notify_service": "Notify service (optional)"
+        }
+      },
+      "options_both": {
+        "title": "Adjust Settings (Day & Time + Calendar)",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Fire Station)",
+          "alarm_sensor": "Active Alarm Sensor",
+          "probe_weekday": "Training weekday",
+          "probe_start": "Training time window start",
+          "probe_end": "Training time window end",
+          "probe_count_start": "Minute counter start",
+          "probe_count_end": "Minute counter end",
+          "probe_calendar_entity": "Calendar Entity",
+          "probe_keywords": "Keywords (comma-separated)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "notify_service": "Notify service (optional)"
         }

@@ -10,8 +10,15 @@
           "alarm_sensor": "Aktiver Alarm Sensor"
         }
       },
+      "probe_mode": {
+        "title": "Probe / Übungs-Modus",
+        "description": "Wie sollen Proben/Übungen erkannt werden?",
+        "data": {
+          "probe_mode": "Modus"
+        }
+      },
       "probe": {
-        "title": "Probe / Übungs-Einstellungen",
+        "title": "Probe / Übungs-Einstellungen (Tag & Zeit)",
         "description": "Wann findet die wöchentliche Übung statt?",
         "data": {
           "probe_weekday": "Wochentag",
@@ -19,6 +26,33 @@
           "probe_end": "Zeitfenster Ende (HH:MM)",
           "probe_count_start": "Minuten-Zähler Start (HH:MM)",
           "probe_count_end": "Minuten-Zähler Ende (HH:MM)"
+        }
+      },
+      "probe_calendar": {
+        "title": "Probe / Übungs-Einstellungen (Kalender)",
+        "description": "Wähle eine Kalender-Entität und gib Schlagwörter ein (kommagetrennt). Wenn ein Kalender-Ereignis aktiv ist, das eines der Schlagwörter enthält, wird die Zeit als Probe getrackt.",
+        "data": {
+          "probe_calendar_entity": "Kalender-Entität",
+          "probe_keywords": "Schlagwörter (kommagetrennt, z.B. Probe,Übung,Training)"
+        }
+      },
+      "probe_both_day_time": {
+        "title": "Probe – Tag & Zeit Einstellungen",
+        "description": "Zuerst die festen Probe-Zeiten konfigurieren. Im nächsten Schritt folgen die Kalender-Einstellungen.",
+        "data": {
+          "probe_weekday": "Wochentag",
+          "probe_start": "Zeitfenster Start (HH:MM)",
+          "probe_end": "Zeitfenster Ende (HH:MM)",
+          "probe_count_start": "Minuten-Zähler Start (HH:MM)",
+          "probe_count_end": "Minuten-Zähler Ende (HH:MM)"
+        }
+      },
+      "probe_both_calendar": {
+        "title": "Probe – Kalender Einstellungen",
+        "description": "Zusätzlich zu den festen Zeiten: Kalender-Ereignisse mit Schlagwörtern lösen ebenfalls Probe-Tracking aus.",
+        "data": {
+          "probe_calendar_entity": "Kalender-Entität",
+          "probe_keywords": "Schlagwörter (kommagetrennt, z.B. Probe,Übung,Training)"
         }
       },
       "einsatz": {
@@ -32,7 +66,8 @@
     },
     "error": {
       "no_person": "Keine Person-Entity gefunden. Bitte zuerst eine Person in HA anlegen.",
-      "no_zone": "Keine Zone-Entity gefunden. Bitte zuerst eine Zone in HA anlegen."
+      "no_zone": "Keine Zone-Entity gefunden. Bitte zuerst eine Zone in HA anlegen.",
+      "no_calendar": "Keine Kalender-Entity gefunden. Bitte zuerst einen Kalender in HA einrichten."
     },
     "abort": {
       "already_configured": "Integration ist bereits eingerichtet."
@@ -41,7 +76,14 @@
   "options": {
     "step": {
       "init": {
-        "title": "Einstellungen anpassen",
+        "title": "Probe-Modus wählen",
+        "description": "Wie sollen Proben/Übungen erkannt werden?",
+        "data": {
+          "probe_mode": "Modus"
+        }
+      },
+      "options_day_time": {
+        "title": "Einstellungen anpassen (Tag & Zeit)",
         "data": {
           "person_entity": "Person",
           "zone_entity": "Zone (Gerätehaus)",
@@ -51,6 +93,35 @@
           "probe_end": "Probe-Zeitfenster Ende",
           "probe_count_start": "Minuten-Zähler Start",
           "probe_count_end": "Minuten-Zähler Ende",
+          "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "notify_service": "Notify Service (optional)"
+        }
+      },
+      "options_calendar": {
+        "title": "Einstellungen anpassen (Kalender)",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Gerätehaus)",
+          "alarm_sensor": "Aktiver Alarm Sensor",
+          "probe_calendar_entity": "Kalender-Entität",
+          "probe_keywords": "Schlagwörter (kommagetrennt)",
+          "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "notify_service": "Notify Service (optional)"
+        }
+      },
+      "options_both": {
+        "title": "Einstellungen anpassen (Tag & Zeit + Kalender)",
+        "data": {
+          "person_entity": "Person",
+          "zone_entity": "Zone (Gerätehaus)",
+          "alarm_sensor": "Aktiver Alarm Sensor",
+          "probe_weekday": "Probe-Wochentag",
+          "probe_start": "Probe-Zeitfenster Start",
+          "probe_end": "Probe-Zeitfenster Ende",
+          "probe_count_start": "Minuten-Zähler Start",
+          "probe_count_end": "Minuten-Zähler Ende",
+          "probe_calendar_entity": "Kalender-Entität",
+          "probe_keywords": "Schlagwörter (kommagetrennt)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "notify_service": "Notify Service (optional)"
         }

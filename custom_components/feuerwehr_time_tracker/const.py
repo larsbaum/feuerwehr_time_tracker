@@ -12,8 +12,16 @@ CONF_PROBE_START = "probe_start"
 CONF_PROBE_END = "probe_end"
 CONF_PROBE_COUNT_START = "probe_count_start"
 CONF_PROBE_COUNT_END = "probe_count_end"
+CONF_PROBE_MODE = "probe_mode"
+CONF_PROBE_CALENDAR = "probe_calendar_entity"
+CONF_PROBE_KEYWORDS = "probe_keywords"
 CONF_EINSATZ_MAX_HOURS = "einsatz_max_hours"
 CONF_NOTIFY_SERVICE = "notify_service"
+
+# Probe mode choices
+PROBE_MODE_DAY_TIME = "day_time"
+PROBE_MODE_CALENDAR = "calendar"
+PROBE_MODE_BOTH = "both"
 
 # Storage
 STORAGE_KEY = "feuerwehr_time_tracker"

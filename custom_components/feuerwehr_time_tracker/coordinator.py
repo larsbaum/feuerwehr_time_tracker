@@ -21,11 +21,14 @@ from .const import (
     CONF_PERSON,
     CONF_ZONE,
     CONF_ALARM,
+    CONF_PROBE_MODE,
     CONF_PROBE_WEEKDAY,
     CONF_PROBE_START,
     CONF_PROBE_END,
     CONF_PROBE_COUNT_START,
     CONF_PROBE_COUNT_END,
+    CONF_PROBE_CALENDAR,
+    CONF_PROBE_KEYWORDS,
     CONF_EINSATZ_MAX_HOURS,
     CONF_NOTIFY_SERVICE,
     DATA_EINSATZ_MINUTES,
@@ -33,6 +36,9 @@ from .const import (
     DATA_GERATEHAUS_MINUTES,
     DATA_EINSATZ_STARTED,
     DATA_PROBE_STARTED,
+    PROBE_MODE_DAY_TIME,
+    PROBE_MODE_CALENDAR,
+    PROBE_MODE_BOTH,
     WEEKDAY_OPTIONS,
 )
 
@@ -128,6 +134,71 @@ class FeuerwehrCoordinator:
         return zone_entity_id.replace("zone.", "")
 
     # ------------------------------------------------------------------
+    # Calendar-based probe check
+    # ------------------------------------------------------------------
+
+    def _is_probe_calendar_active(self) -> bool:
+        """Check if a matching calendar event is currently active."""
+        cal_entity = self.get_cfg(CONF_PROBE_CALENDAR, "")
+        if not cal_entity:
+            return False
+
+        cal_state = self.hass.states.get(cal_entity)
+        if not cal_state or cal_state.state != "on":
+            return False
+
+        # Check keywords against the event summary/message
+        keywords_raw = self.get_cfg(CONF_PROBE_KEYWORDS, "")
+        if not keywords_raw:
+            # No keywords configured → any active event counts
+            return True
+
+        keywords = [kw.strip().lower() for kw in keywords_raw.split(",") if kw.strip()]
+        if not keywords:
+            return True
+
+        # Calendar entities expose the current event title as 'message' attribute
+        event_summary = (cal_state.attributes.get("message") or "").lower()
+
+        return any(kw in event_summary for kw in keywords)
+
+    def _is_day_time_probe_active(self, now: datetime) -> bool:
+        """Check if day & time based probe window is active."""
+        probe_weekday = self.get_cfg(CONF_PROBE_WEEKDAY, "tue")
+        probe_start = self.get_cfg(CONF_PROBE_START, "17:00")
+        probe_end = self.get_cfg(CONF_PROBE_END, "23:59")
+        return _is_probe_weekday(now, probe_weekday) and _in_time_window(now, probe_start, probe_end)
+
+    def _is_day_time_probe_count_active(self, now: datetime) -> bool:
+        """Check if day & time based probe counting window is active."""
+        probe_weekday = self.get_cfg(CONF_PROBE_WEEKDAY, "tue")
+        probe_count_start = self.get_cfg(CONF_PROBE_COUNT_START, "19:00")
+        probe_count_end = self.get_cfg(CONF_PROBE_COUNT_END, "23:00")
+        return _is_probe_weekday(now, probe_weekday) and _in_time_window(now, probe_count_start, probe_count_end)
+
+    def _is_probe_active(self, now: datetime) -> bool:
+        """Check if probe tracking should be active based on configured mode."""
+        mode = self.get_cfg(CONF_PROBE_MODE, PROBE_MODE_DAY_TIME)
+
+        if mode == PROBE_MODE_DAY_TIME:
+            return self._is_day_time_probe_active(now)
+        elif mode == PROBE_MODE_CALENDAR:
+            return self._is_probe_calendar_active()
+        else:  # BOTH – either condition triggers probe
+            return self._is_day_time_probe_active(now) or self._is_probe_calendar_active()
+
+    def _is_probe_count_active(self, now: datetime) -> bool:
+        """Check if probe minute counting (in-zone) should be active."""
+        mode = self.get_cfg(CONF_PROBE_MODE, PROBE_MODE_DAY_TIME)
+
+        if mode == PROBE_MODE_DAY_TIME:
+            return self._is_day_time_probe_count_active(now)
+        elif mode == PROBE_MODE_CALENDAR:
+            return self._is_probe_calendar_active()
+        else:  # BOTH – either condition triggers counting
+            return self._is_day_time_probe_count_active(now) or self._is_probe_calendar_active()
+
+    # ------------------------------------------------------------------
     # Setup / Teardown
     # ------------------------------------------------------------------
 
@@ -195,16 +266,8 @@ class FeuerwehrCoordinator:
             self._data[DATA_EINSATZ_STARTED] = now.timestamp()
             _LOGGER.info("Einsatz started at %s", now)
 
-        # Probe: correct weekday + time window
-        probe_weekday = self.get_cfg(CONF_PROBE_WEEKDAY, "tue")
-        probe_start = self.get_cfg(CONF_PROBE_START, "17:00")
-        probe_end = self.get_cfg(CONF_PROBE_END, "23:59")
-
-        if (
-            not alarm_on
-            and _is_probe_weekday(now, probe_weekday)
-            and _in_time_window(now, probe_start, probe_end)
-        ):
+        # Probe: check based on configured mode
+        if not alarm_on and self._is_probe_active(now):
             self._data[DATA_PROBE_STARTED] = now.timestamp()
             _LOGGER.info("Probe absence started at %s", now)
 
@@ -239,16 +302,9 @@ class FeuerwehrCoordinator:
             self._data[DATA_EINSATZ_STARTED] = None
 
         # --- Probe (absence tracking) ---
-        probe_weekday = self.get_cfg(CONF_PROBE_WEEKDAY, "tue")
-        probe_start = self.get_cfg(CONF_PROBE_START, "17:00")
-        probe_end = self.get_cfg(CONF_PROBE_END, "23:59")
         probe_started = self._data.get(DATA_PROBE_STARTED)
 
-        if (
-            probe_started
-            and _is_probe_weekday(now, probe_weekday)
-            and _in_time_window(now, probe_start, probe_end)
-        ):
+        if probe_started and self._is_probe_active(now):
             # Only count if timestamp is from today
             started_dt = datetime.fromtimestamp(probe_started, tz=now.tzinfo)
             if started_dt.date() == now.date():
@@ -278,9 +334,6 @@ class FeuerwehrCoordinator:
         person = self.get_cfg(CONF_PERSON)
         zone = self._get_zone_name()
         alarm = self.get_cfg(CONF_ALARM, "")
-        probe_weekday = self.get_cfg(CONF_PROBE_WEEKDAY, "tue")
-        probe_count_start = self.get_cfg(CONF_PROBE_COUNT_START, "19:00")
-        probe_count_end = self.get_cfg(CONF_PROBE_COUNT_END, "23:00")
 
         person_state = self.hass.states.get(person)
         if not person_state or person_state.state != zone:
@@ -295,11 +348,8 @@ class FeuerwehrCoordinator:
         if alarm_on:
             self._data[DATA_EINSATZ_MINUTES] = int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + 1
             _LOGGER.debug("Einsatz minute tick (in zone): total=%d", self._data[DATA_EINSATZ_MINUTES])
-        # Probe counting: correct weekday + count window + alarm OFF
-        elif (
-            _is_probe_weekday(now, probe_weekday)
-            and _in_time_window(now, probe_count_start, probe_count_end)
-        ):
+        # Probe counting: check based on configured mode
+        elif self._is_probe_count_active(now):
             self._data[DATA_PROBE_MINUTES] = int(self._data.get(DATA_PROBE_MINUTES, 0)) + 1
             _LOGGER.debug("Probe minute tick: total=%d", self._data[DATA_PROBE_MINUTES])
         else:
