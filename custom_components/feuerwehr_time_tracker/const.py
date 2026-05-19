@@ -3,7 +3,7 @@
 DOMAIN = "feuerwehr_time_tracker"
 PLATFORMS = ["sensor"]
 
-CARD_VERSION = "0.2.2"
+CARD_VERSION = "0.2.6"
 
 # Config entry keys
 CONF_PERSON = "person_entity"
