@@ -44,24 +44,28 @@ SERVICE_ADD_MINUTES_SCHEMA = vol.Schema({
 })
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register frontend card early, before any config entry loads."""
+    hass.data.setdefault(DOMAIN, {})
+
+    js_path = os.path.join(
+        os.path.dirname(__file__), "frontend", "feuerwehr-time-tracker-card.js"
+    )
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(
+            f"/{DOMAIN}/feuerwehr-time-tracker-card.js",
+            js_path,
+            cache_headers=False,
+        )
+    ])
+    add_extra_js_url(hass, f"/{DOMAIN}/feuerwehr-time-tracker-card.js?v={CARD_VERSION}")
+
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Feuerwehr Zeit-Tracker from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-
-    # Register frontend card (once across all config entries)
-    if "frontend_registered" not in hass.data[DOMAIN]:
-        js_path = os.path.join(
-            os.path.dirname(__file__), "frontend", "feuerwehr-time-tracker-card.js"
-        )
-        await hass.http.async_register_static_paths([
-            StaticPathConfig(
-                f"/{DOMAIN}/feuerwehr-time-tracker-card.js",
-                js_path,
-                cache_headers=True,
-            )
-        ])
-        add_extra_js_url(hass, f"/{DOMAIN}/feuerwehr-time-tracker-card.js?v={CARD_VERSION}")
-        hass.data[DOMAIN]["frontend_registered"] = True
 
     # Merge entry.data and entry.options (options override data on reconfigure)
     config = {**entry.data, **entry.options}
@@ -94,8 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     # Remove services if no more coordinator entries remain
-    remaining = {k: v for k, v in hass.data[DOMAIN].items() if k != "frontend_registered"}
-    if not remaining:
+    if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, SERVICE_RESET)
         hass.services.async_remove(DOMAIN, SERVICE_ADD_MINUTES)
 
@@ -112,9 +115,8 @@ def _get_coordinator(hass: HomeAssistant, entry_id: str | None) -> FeuerwehrCoor
     entries = hass.data.get(DOMAIN, {})
     if entry_id and entry_id in entries:
         return entries[entry_id]
-    coordinators = {k: v for k, v in entries.items() if isinstance(v, FeuerwehrCoordinator)}
-    if len(coordinators) == 1:
-        return next(iter(coordinators.values()))
+    if len(entries) == 1:
+        return next(iter(entries.values()))
     return None
 
 
