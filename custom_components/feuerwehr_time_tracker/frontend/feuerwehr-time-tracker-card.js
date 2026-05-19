@@ -73,9 +73,12 @@ const CARD_STYLES = `
   }
   .content.large {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 12px;
     flex-wrap: wrap;
+  }
+  .content.large .total-section {
+    align-self: center;
   }
   .total-section {
     display: flex;
@@ -100,13 +103,9 @@ const CARD_STYLES = `
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-    margin-left: auto;
-    width: 100%;
+    flex: 1 1 0;
+    min-width: 0;
     box-sizing: border-box;
-  }
-  .chips-row.has-prominent {
-    width: auto;
-    margin-left: auto;
   }
   .chip {
     display: flex;
@@ -122,10 +121,11 @@ const CARD_STYLES = `
     box-sizing: border-box;
     transition: transform 0.15s ease;
     overflow: hidden;
+    container-type: inline-size;
   }
   .chip:hover { transform: scale(1.02); }
   .chip-label {
-    font-size: 11px;
+    font-size: clamp(8px, 11cqi, 12px);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -135,7 +135,7 @@ const CARD_STYLES = `
     max-width: 100%;
   }
   .chip-value {
-    font-size: 18px;
+    font-size: clamp(13px, 18cqi, 20px);
     font-weight: 800;
     color: var(--primary-text-color);
     white-space: nowrap;
@@ -151,6 +151,9 @@ const CARD_STYLES = `
     width: 100%;
     box-sizing: border-box;
   }
+  .chips-grid .chip-compact:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
   .chip-compact {
     display: flex;
     flex-direction: column;
@@ -163,10 +166,11 @@ const CARD_STYLES = `
     box-sizing: border-box;
     overflow: hidden;
     transition: transform 0.15s ease;
+    container-type: inline-size;
   }
   .chip-compact:hover { transform: scale(1.03); }
   .chip-label-compact {
-    font-size: 10px;
+    font-size: clamp(7px, 10cqi, 11px);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -176,7 +180,7 @@ const CARD_STYLES = `
     max-width: 100%;
   }
   .chip-value-compact {
-    font-size: 14px;
+    font-size: clamp(10px, 15cqi, 16px);
     font-weight: 800;
     color: var(--primary-text-color);
   }
@@ -406,7 +410,7 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
               <span class="total-label">${c.label_gesamt}</span>
             </div>
           ` : ""}
-          <div class="chips-row ${showProminent ? "has-prominent" : ""}">
+          <div class="chips-row">
             ${chips.map((ch) => `
               <div class="chip" style="
                 background: ${hexToRgba(ch.color, 0.12)};
