@@ -171,18 +171,24 @@ data:
 
 ---
 
-## 💡 Beispiel: Dashboard-Karte
+## 💡 Dashboard-Karte
 
-```yaml
-type: entities
-title: Feuerwehr Stunden
-entities:
-  - entity: sensor.alarm_hours
-    name: 🚨 Einsatz
-  - entity: sensor.training_hours
-    name: 🧑‍🚒 Probe
-  - entity: sensor.station_hours
-    name: 🏠 Gerätehaus
-  - entity: sensor.total_hours
-    name: 📊 Gesamt
-```
+Die Integration bringt eine eigene Dashboard-Karte mit, die direkt über den visuellen Editor konfiguriert werden kann – kein YAML nötig.
+
+### Karte hinzufügen
+
+1. Dashboard öffnen → **Karte hinzufügen**
+2. Nach **„Feuerwehr Zeittracker"** suchen
+3. Karte auswählen und über den Editor konfigurieren
+
+### Konfigurierbare Optionen
+
+| Option | Beschreibung |
+|--------|-------------|
+| Layout | Automatisch (responsive), Groß oder Kompakt |
+| Kategorien | Einsatz, Probe, Gerätehaus und Gesamt einzeln ein-/ausblenden |
+| Bezeichnungen | Eigene Labels pro Kategorie |
+| Farben | Individuelle Farbe pro Kategorie |
+| Reihenfolge | Kategorien per Pfeil-Buttons umsortieren |
+| Gesamt-Anzeige | Prominent (große Zahl), als Kachel oder versteckt |
+| Entities | Entities können manuell überschrieben werden |
