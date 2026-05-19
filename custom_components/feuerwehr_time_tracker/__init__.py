@@ -6,6 +6,7 @@ import os
 
 import voluptuous as vol
 from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
@@ -52,11 +53,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         js_path = os.path.join(
             os.path.dirname(__file__), "frontend", "feuerwehr-time-tracker-card.js"
         )
-        hass.http.register_static_path(
-            f"/{DOMAIN}/feuerwehr-time-tracker-card.js",
-            js_path,
-            cache_headers=True,
-        )
+        hass.http.async_register_static_paths([
+            StaticPathConfig(
+                f"/{DOMAIN}/feuerwehr-time-tracker-card.js",
+                js_path,
+                cache_headers=True,
+            )
+        ])
         add_extra_js_url(hass, f"/{DOMAIN}/feuerwehr-time-tracker-card.js?v={CARD_VERSION}")
         hass.data[DOMAIN]["frontend_registered"] = True
 
