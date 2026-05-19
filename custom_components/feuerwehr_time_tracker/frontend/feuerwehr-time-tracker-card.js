@@ -110,25 +110,32 @@ const CARD_STYLES = `
   }
   .chip {
     display: flex;
-    gap: 8px;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 8px 10px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 8px;
     border-radius: 12px;
     border: 1px solid;
     flex: 1 1 0;
     min-width: 0;
     box-sizing: border-box;
     transition: transform 0.15s ease;
+    overflow: hidden;
   }
   .chip:hover { transform: scale(1.02); }
   .chip-label {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
   }
   .chip-value {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 800;
     color: var(--primary-text-color);
     white-space: nowrap;
@@ -154,6 +161,7 @@ const CARD_STYLES = `
     border-radius: 10px;
     border: 1px solid;
     box-sizing: border-box;
+    overflow: hidden;
     transition: transform 0.15s ease;
   }
   .chip-compact:hover { transform: scale(1.03); }
@@ -162,7 +170,10 @@ const CARD_STYLES = `
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
   }
   .chip-value-compact {
     font-size: 14px;
