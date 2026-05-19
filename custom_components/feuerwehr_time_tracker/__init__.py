@@ -53,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         js_path = os.path.join(
             os.path.dirname(__file__), "frontend", "feuerwehr-time-tracker-card.js"
         )
-        hass.http.async_register_static_paths([
+        await hass.http.async_register_static_paths([
             StaticPathConfig(
                 f"/{DOMAIN}/feuerwehr-time-tracker-card.js",
                 js_path,
@@ -112,8 +112,9 @@ def _get_coordinator(hass: HomeAssistant, entry_id: str | None) -> FeuerwehrCoor
     entries = hass.data.get(DOMAIN, {})
     if entry_id and entry_id in entries:
         return entries[entry_id]
-    if len(entries) == 1:
-        return next(iter(entries.values()))
+    coordinators = {k: v for k, v in entries.items() if isinstance(v, FeuerwehrCoordinator)}
+    if len(coordinators) == 1:
+        return next(iter(coordinators.values()))
     return None
 
 
