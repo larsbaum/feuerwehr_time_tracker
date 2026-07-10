@@ -33,8 +33,8 @@
         "description": "Select a calendar entity and enter keywords (comma-separated). When a calendar event is active that contains one of the keywords, time will be tracked as training. Optionally, all remaining calendar events (without a keyword) can be tracked as 'other' time when you leave the station for them.",
         "data": {
           "probe_calendar_entity": "Calendar Entity",
-          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)",
-          "track_other_absence": "Track other calendar events as 'other' time",
+          "probe_keywords": "Training keywords (comma-separated, e.g. Training,Exercise,Drill)",
+          "track_other_absence": "Recognize all other calendar entries as \"other\" time",
           "sonstiges_max_hours": "Max. other-appointment duration (hours)"
         }
       },
@@ -54,8 +54,8 @@
         "description": "In addition to fixed times: calendar events with keywords also trigger training tracking. Optionally, all remaining calendar events (without a keyword) can be tracked as 'other' time when you leave the station for them.",
         "data": {
           "probe_calendar_entity": "Calendar Entity",
-          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)",
-          "track_other_absence": "Track other calendar events as 'other' time",
+          "probe_keywords": "Training keywords (comma-separated, e.g. Training,Exercise,Drill)",
+          "track_other_absence": "Recognize all other calendar entries as \"other\" time",
           "sonstiges_max_hours": "Max. other-appointment duration (hours)"
         }
       },
@@ -110,9 +110,9 @@
           "zone_entity": "Zone (Fire Station)",
           "alarm_sensor": "Active Alarm Sensor",
           "probe_calendar_entity": "Calendar Entity",
-          "probe_keywords": "Keywords (comma-separated)",
-          "track_other_absence": "Track other calendar events as 'other' time",
-          "sonstiges_max_hours": "Max. other-appointment duration (hours)",
+          "probe_keywords": "Training keywords (comma-separated)",
+          "track_other_absence": "Recognize all other calendar entries as \"other\" time",
+          "sonstiges_max_hours": "Max. duration for other appointments (hours)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"
@@ -130,9 +130,9 @@
           "probe_count_start": "Minute counter start",
           "probe_count_end": "Minute counter end",
           "probe_calendar_entity": "Calendar Entity",
-          "probe_keywords": "Keywords (comma-separated)",
-          "track_other_absence": "Track other calendar events as 'other' time",
-          "sonstiges_max_hours": "Max. other-appointment duration (hours)",
+          "probe_keywords": "Training keywords (comma-separated)",
+          "track_other_absence": "Recognize all other calendar entries as \"other\" time",
+          "sonstiges_max_hours": "Max. duration for other appointments (hours)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"
