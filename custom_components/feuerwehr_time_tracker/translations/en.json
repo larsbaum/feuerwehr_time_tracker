@@ -30,10 +30,12 @@
       },
       "probe_calendar": {
         "title": "Exercise / Training Settings (Calendar)",
-        "description": "Select a calendar entity and enter keywords (comma-separated). When a calendar event is active that contains one of the keywords, time will be tracked as training.",
+        "description": "Select a calendar entity and enter keywords (comma-separated). When a calendar event is active that contains one of the keywords, time will be tracked as training. Optionally, all remaining calendar events (without a keyword) can be tracked as 'other' time when you leave the station for them.",
         "data": {
           "probe_calendar_entity": "Calendar Entity",
-          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)"
+          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)",
+          "track_other_absence": "Track other calendar events as 'other' time",
+          "sonstiges_max_hours": "Max. other-appointment duration (hours)"
         }
       },
       "probe_both_day_time": {
@@ -49,10 +51,12 @@
       },
       "probe_both_calendar": {
         "title": "Training – Calendar Settings",
-        "description": "In addition to fixed times: calendar events with keywords also trigger training tracking.",
+        "description": "In addition to fixed times: calendar events with keywords also trigger training tracking. Optionally, all remaining calendar events (without a keyword) can be tracked as 'other' time when you leave the station for them.",
         "data": {
           "probe_calendar_entity": "Calendar Entity",
-          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)"
+          "probe_keywords": "Keywords (comma-separated, e.g. Training,Exercise,Drill)",
+          "track_other_absence": "Track other calendar events as 'other' time",
+          "sonstiges_max_hours": "Max. other-appointment duration (hours)"
         }
       },
       "einsatz": {
@@ -60,6 +64,7 @@
         "description": "Settings for deployment tracking and optional push notifications.",
         "data": {
           "einsatz_max_hours": "Max. deployment duration (hours)",
+          "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional, e.g. notify.mobile_app_iphone)"
         }
       }
@@ -94,6 +99,7 @@
           "probe_count_start": "Minute counter start",
           "probe_count_end": "Minute counter end",
           "einsatz_max_hours": "Max. deployment duration (hours)",
+          "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"
         }
       },
@@ -105,7 +111,10 @@
           "alarm_sensor": "Active Alarm Sensor",
           "probe_calendar_entity": "Calendar Entity",
           "probe_keywords": "Keywords (comma-separated)",
+          "track_other_absence": "Track other calendar events as 'other' time",
+          "sonstiges_max_hours": "Max. other-appointment duration (hours)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
+          "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"
         }
       },
@@ -122,7 +131,10 @@
           "probe_count_end": "Minute counter end",
           "probe_calendar_entity": "Calendar Entity",
           "probe_keywords": "Keywords (comma-separated)",
+          "track_other_absence": "Track other calendar events as 'other' time",
+          "sonstiges_max_hours": "Max. other-appointment duration (hours)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
+          "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"
         }
       }

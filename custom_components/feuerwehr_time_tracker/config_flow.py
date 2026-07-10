@@ -21,6 +21,9 @@ from .const import (
     CONF_PROBE_CALENDAR,
     CONF_PROBE_KEYWORDS,
     CONF_EINSATZ_MAX_HOURS,
+    CONF_PROBE_MAX_HOURS,
+    CONF_TRACK_OTHER_ABSENCE,
+    CONF_SONSTIGES_MAX_HOURS,
     CONF_NOTIFY_SERVICE,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
@@ -138,13 +141,14 @@ class FeuerwehrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "no_calendar"
 
         if user_input is not None and not errors:
-            self._data[CONF_PROBE_CALENDAR] = user_input[CONF_PROBE_CALENDAR]
-            self._data[CONF_PROBE_KEYWORDS] = user_input[CONF_PROBE_KEYWORDS]
+            self._data.update(user_input)
             return await self.async_step_einsatz()
 
         schema = vol.Schema({
             vol.Required(CONF_PROBE_CALENDAR, default=calendars[0] if calendars else ""): vol.In(calendars) if calendars else str,
             vol.Required(CONF_PROBE_KEYWORDS, default=""): str,
+            vol.Required(CONF_TRACK_OTHER_ABSENCE, default=False): bool,
+            vol.Required(CONF_SONSTIGES_MAX_HOURS, default=6): vol.All(int, vol.Range(min=1, max=24)),
         })
 
         return self.async_show_form(
@@ -181,13 +185,14 @@ class FeuerwehrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "no_calendar"
 
         if user_input is not None and not errors:
-            self._data[CONF_PROBE_CALENDAR] = user_input[CONF_PROBE_CALENDAR]
-            self._data[CONF_PROBE_KEYWORDS] = user_input[CONF_PROBE_KEYWORDS]
+            self._data.update(user_input)
             return await self.async_step_einsatz()
 
         schema = vol.Schema({
             vol.Required(CONF_PROBE_CALENDAR, default=calendars[0] if calendars else ""): vol.In(calendars) if calendars else str,
             vol.Required(CONF_PROBE_KEYWORDS, default=""): str,
+            vol.Required(CONF_TRACK_OTHER_ABSENCE, default=False): bool,
+            vol.Required(CONF_SONSTIGES_MAX_HOURS, default=6): vol.All(int, vol.Range(min=1, max=24)),
         })
 
         return self.async_show_form(
@@ -205,6 +210,7 @@ class FeuerwehrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema({
             vol.Required(CONF_EINSATZ_MAX_HOURS, default=10): vol.All(int, vol.Range(min=1, max=24)),
+            vol.Required(CONF_PROBE_MAX_HOURS, default=6): vol.All(int, vol.Range(min=1, max=24)),
             vol.Optional(CONF_NOTIFY_SERVICE, default=""): str,
         })
 
@@ -256,9 +262,10 @@ class FeuerwehrOptionsFlow(config_entries.OptionsFlow):
         }
 
     def _einsatz_schema_fields(self, current: dict) -> dict:
-        """Einsatz + notify fields."""
+        """Einsatz + probe cap + notify fields."""
         return {
             vol.Required(CONF_EINSATZ_MAX_HOURS, default=current.get(CONF_EINSATZ_MAX_HOURS, 10)): vol.All(int, vol.Range(min=1, max=24)),
+            vol.Required(CONF_PROBE_MAX_HOURS, default=current.get(CONF_PROBE_MAX_HOURS, 6)): vol.All(int, vol.Range(min=1, max=24)),
             vol.Optional(CONF_NOTIFY_SERVICE, default=current.get(CONF_NOTIFY_SERVICE, "")): str,
         }
 
@@ -273,11 +280,13 @@ class FeuerwehrOptionsFlow(config_entries.OptionsFlow):
         }
 
     def _calendar_fields(self, current: dict) -> dict:
-        """Calendar probe fields."""
+        """Calendar probe fields + other-appointment toggle & cap."""
         calendars = _get_calendar_entities(self.hass)
         return {
             vol.Required(CONF_PROBE_CALENDAR, default=current.get(CONF_PROBE_CALENDAR, calendars[0] if calendars else "")): vol.In(calendars) if calendars else str,
             vol.Required(CONF_PROBE_KEYWORDS, default=current.get(CONF_PROBE_KEYWORDS, "")): str,
+            vol.Required(CONF_TRACK_OTHER_ABSENCE, default=current.get(CONF_TRACK_OTHER_ABSENCE, False)): bool,
+            vol.Required(CONF_SONSTIGES_MAX_HOURS, default=current.get(CONF_SONSTIGES_MAX_HOURS, 6)): vol.All(int, vol.Range(min=1, max=24)),
         }
 
     async def async_step_options_day_time(self, user_input=None):

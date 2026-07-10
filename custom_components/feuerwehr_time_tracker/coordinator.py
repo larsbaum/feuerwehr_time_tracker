@@ -30,12 +30,16 @@ from .const import (
     CONF_PROBE_CALENDAR,
     CONF_PROBE_KEYWORDS,
     CONF_EINSATZ_MAX_HOURS,
+    CONF_PROBE_MAX_HOURS,
+    CONF_TRACK_OTHER_ABSENCE,
+    CONF_SONSTIGES_MAX_HOURS,
     CONF_NOTIFY_SERVICE,
     DATA_EINSATZ_MINUTES,
     DATA_PROBE_MINUTES,
     DATA_SONSTIGES_MINUTES,
     DATA_EINSATZ_STARTED,
     DATA_PROBE_STARTED,
+    DATA_SONSTIGES_STARTED,
     DATA_CURRENT_YEAR,
     DATA_PREVIOUS_YEARS,
     LEGACY_DATA_GERATEHAUS_MINUTES,
@@ -92,6 +96,7 @@ class FeuerwehrCoordinator:
             DATA_SONSTIGES_MINUTES: 0,
             DATA_EINSATZ_STARTED: None,
             DATA_PROBE_STARTED: None,
+            DATA_SONSTIGES_STARTED: None,
             DATA_CURRENT_YEAR: None,
             DATA_PREVIOUS_YEARS: {},
         }
@@ -171,6 +176,37 @@ class FeuerwehrCoordinator:
         event_summary = (cal_state.attributes.get("message") or "").lower()
 
         return any(kw in event_summary for kw in keywords)
+
+    def _is_other_appointment_active(self) -> bool:
+        """Check if a non-training calendar event is currently active.
+
+        Used to track appointments outside the fire station that are NOT
+        exercises (e.g. meetings, courses) as "Sonstiges" absence – only when
+        the toggle is enabled.  A configured calendar is mandatory so that
+        arbitrary zone exits (shopping etc.) never count: only a running
+        calendar event whose title does NOT match any of the probe keywords
+        qualifies.  Without keywords every active event is a probe, so there is
+        nothing "other" to track (no double counting).
+        """
+        if not self.get_cfg(CONF_TRACK_OTHER_ABSENCE, False):
+            return False
+
+        cal_entity = self.get_cfg(CONF_PROBE_CALENDAR, "")
+        if not cal_entity:
+            return False
+
+        cal_state = self.hass.states.get(cal_entity)
+        if not cal_state or cal_state.state != "on":
+            return False
+
+        keywords_raw = self.get_cfg(CONF_PROBE_KEYWORDS, "")
+        keywords = [kw.strip().lower() for kw in keywords_raw.split(",") if kw.strip()]
+        if not keywords:
+            return False
+
+        event_summary = (cal_state.attributes.get("message") or "").lower()
+        # "Other" = active event that is NOT a training (no keyword match).
+        return not any(kw in event_summary for kw in keywords)
 
     def _is_day_time_probe_active(self, now: datetime) -> bool:
         """Check if day & time based probe window is active."""
@@ -283,21 +319,27 @@ class FeuerwehrCoordinator:
         alarm_state = self.hass.states.get(alarm_entity)
         alarm_on = alarm_state and alarm_state.state == "on"
 
-        # Einsatz: alarm must be active
+        # Priority: Einsatz (alarm) > Probe > sonstiger Termin (calendar).
+        # Mutually exclusive: in calendar mode _is_probe_active already checks
+        # the keyword match, so a keyword event is a probe and a non-keyword
+        # event is "other" – never both.
         if alarm_on:
             self._data[DATA_EINSATZ_STARTED] = now.timestamp()
             _LOGGER.info("Einsatz started at %s", now)
-
-        # Probe: check based on configured mode
-        if not alarm_on and self._is_probe_active(now):
+        elif self._is_probe_active(now):
             self._data[DATA_PROBE_STARTED] = now.timestamp()
             _LOGGER.info("Probe absence started at %s", now)
+        elif self._is_other_appointment_active():
+            self._data[DATA_SONSTIGES_STARTED] = now.timestamp()
+            _LOGGER.info("Sonstiges appointment absence started at %s", now)
 
         self.hass.async_create_task(self._async_save())
 
     def _on_zone_enter(self, now: datetime) -> None:
         """Handle zone enter: calculate and add minutes if applicable."""
-        max_hours = self.get_cfg(CONF_EINSATZ_MAX_HOURS, 10)
+        einsatz_max = self.get_cfg(CONF_EINSATZ_MAX_HOURS, 10)
+        probe_max = self.get_cfg(CONF_PROBE_MAX_HOURS, 6)
+        sonstiges_max = self.get_cfg(CONF_SONSTIGES_MAX_HOURS, 6)
         alarm_entity = self.get_cfg(CONF_ALARM, "")
         alarm_state = self.hass.states.get(alarm_entity)
         alarm_on = alarm_state and alarm_state.state == "on"
@@ -308,7 +350,7 @@ class FeuerwehrCoordinator:
             if alarm_on:
                 # Alarm still active → add elapsed minutes
                 elapsed = now.timestamp() - einsatz_started
-                if 0 < elapsed <= max_hours * 3600:
+                if 0 < elapsed <= einsatz_max * 3600:
                     delta = int(elapsed / 60)
                     self._data[DATA_EINSATZ_MINUTES] = (
                         int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + delta
@@ -327,12 +369,14 @@ class FeuerwehrCoordinator:
         probe_started = self._data.get(DATA_PROBE_STARTED)
 
         if probe_started and self._is_probe_active(now):
-            # Only count if timestamp is from today
+            # Only count if timestamp is from today (day-boundary protection –
+            # a probe must not run over night).
             started_dt = datetime.fromtimestamp(probe_started, tz=now.tzinfo)
             if started_dt.date() == now.date():
                 elapsed = now.timestamp() - probe_started
                 if elapsed > 0:
-                    delta = int(elapsed / 60)
+                    # Cap (not discard) the absence at probe_max hours.
+                    delta = int(min(elapsed, probe_max * 3600) / 60)
                     self._data[DATA_PROBE_MINUTES] = (
                         int(self._data.get(DATA_PROBE_MINUTES, 0)) + delta
                     )
@@ -342,6 +386,26 @@ class FeuerwehrCoordinator:
                         f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_PROBE_MINUTES] / 60:.1f}h"
                     )
             self._data[DATA_PROBE_STARTED] = None
+
+        # --- Sonstiges (appointment absence tracking) ---
+        sonstiges_started = self._data.get(DATA_SONSTIGES_STARTED)
+        if sonstiges_started:
+            # NO day-boundary check: an appointment may run past midnight.
+            # The only limit is the sonstiges_max hours cap. The event no
+            # longer needs to be active on return (appointments end).
+            elapsed = now.timestamp() - sonstiges_started
+            if elapsed > 0:
+                # Cap (not discard) the absence at sonstiges_max hours.
+                delta = int(min(elapsed, sonstiges_max * 3600) / 60)
+                self._data[DATA_SONSTIGES_MINUTES] = (
+                    int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) + delta
+                )
+                _LOGGER.info("Sonstiges appointment: added %d min (total: %d min)", delta, self._data[DATA_SONSTIGES_MINUTES])
+                self._maybe_notify(
+                    "🧰 Termin beendet",
+                    f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_SONSTIGES_MINUTES] / 60:.1f}h"
+                )
+            self._data[DATA_SONSTIGES_STARTED] = None
 
         self._notify_sensors()
         self.hass.async_create_task(self._async_save())

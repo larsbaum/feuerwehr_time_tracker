@@ -10,13 +10,21 @@ from custom_components.feuerwehr_time_tracker.const import (
     CONF_ALARM,
     CONF_EINSATZ_MAX_HOURS,
     CONF_PERSON,
+    CONF_PROBE_CALENDAR,
+    CONF_PROBE_KEYWORDS,
+    CONF_PROBE_MAX_HOURS,
     CONF_PROBE_MODE,
+    CONF_SONSTIGES_MAX_HOURS,
+    CONF_TRACK_OTHER_ABSENCE,
     CONF_ZONE,
     DATA_CURRENT_YEAR,
     DATA_EINSATZ_MINUTES,
     DATA_PREVIOUS_YEARS,
     DATA_PROBE_MINUTES,
+    DATA_PROBE_STARTED,
     DATA_SONSTIGES_MINUTES,
+    DATA_SONSTIGES_STARTED,
+    PROBE_MODE_CALENDAR,
     PROBE_MODE_DAY_TIME,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -408,3 +416,147 @@ async def test_rollover_persists_archive_before_reset(
     last = saved_snapshots[-1]
     assert last["einsatz"] == 0
     assert last["previous_years"]["2026"][DATA_EINSATZ_MINUTES] == 42
+
+
+# ----------------------------------------------------------------------
+# Sonstiges appointment absence (calendar, non-training events)
+# ----------------------------------------------------------------------
+
+CALENDAR_ENTITY = "calendar.feuerwehr"
+
+
+@pytest.fixture
+def calendar_config() -> dict:
+    return {
+        CONF_PERSON: "person.max",
+        CONF_ZONE: "zone.geratehaus",
+        CONF_ALARM: "binary_sensor.alarm",
+        CONF_EINSATZ_MAX_HOURS: 10,
+        CONF_PROBE_MAX_HOURS: 6,
+        CONF_SONSTIGES_MAX_HOURS: 6,
+        CONF_PROBE_MODE: PROBE_MODE_CALENDAR,
+        CONF_PROBE_CALENDAR: CALENDAR_ENTITY,
+        CONF_PROBE_KEYWORDS: "Übung,Probe",
+        CONF_TRACK_OTHER_ABSENCE: True,
+    }
+
+
+def _set_calendar(hass: HomeAssistant, on: bool, summary: str = "") -> None:
+    hass.states.async_set(
+        CALENDAR_ENTITY, "on" if on else "off", {"message": summary}
+    )
+
+
+async def test_other_appointment_absence_tracked(hass: HomeAssistant, calendar_config):
+    """Toggle on + active non-keyword event: absence counts as Sonstiges."""
+    _set_calendar(hass, True, "Vorstandssitzung")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 8, 18, 0)
+    enter = datetime(2026, 7, 8, 19, 0)  # 1h absence
+    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is not None
+
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 60
+    assert coordinator.probe_minutes == 0
+    assert coordinator.einsatz_minutes == 0
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+
+
+async def test_other_appointment_not_tracked_when_toggle_off(
+    hass: HomeAssistant, calendar_config
+):
+    """Toggle off: a non-keyword event must NOT start a Sonstiges absence."""
+    calendar_config[CONF_TRACK_OTHER_ABSENCE] = False
+    _set_calendar(hass, True, "Vorstandssitzung")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    coordinator._on_zone_leave(datetime(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+
+    coordinator._on_zone_enter(datetime(2026, 7, 8, 19, 0))
+    await hass.async_block_till_done()
+    assert coordinator.sonstiges_minutes == 0
+
+
+async def test_keyword_event_tracked_as_probe_not_sonstiges(
+    hass: HomeAssistant, calendar_config
+):
+    """An active keyword event is a probe – never a Sonstiges appointment."""
+    _set_calendar(hass, True, "Monatsübung Atemschutz")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 8, 18, 0)
+    enter = datetime(2026, 7, 8, 19, 0)
+    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_PROBE_STARTED] is not None
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.probe_minutes == 60
+    assert coordinator.sonstiges_minutes == 0
+
+
+async def test_other_appointment_capped_at_max(hass: HomeAssistant, calendar_config):
+    """Absence longer than sonstiges_max_hours is capped, not discarded."""
+    calendar_config[CONF_SONSTIGES_MAX_HOURS] = 2
+    _set_calendar(hass, True, "Ganztägiger Lehrgang")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 8, 8, 0)
+    enter = datetime(2026, 7, 8, 12, 0)  # 4h absence, cap 2h
+    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 120
+
+
+async def test_other_appointment_counts_overnight(
+    hass: HomeAssistant, calendar_config
+):
+    """No day-boundary check for Sonstiges: an appointment may span midnight."""
+    _set_calendar(hass, True, "Nächtlicher Bereitschaftsdienst")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 8, 23, 0)
+    enter = datetime(2026, 7, 9, 1, 0)  # 2h absence across midnight, cap 6h
+    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 120
+
+
+async def test_probe_absence_capped_at_max(hass: HomeAssistant, base_config):
+    """Probe absence keeps its day-boundary but is now capped at probe_max_hours."""
+    base_config[CONF_PROBE_MAX_HOURS] = 2
+    hass.states.async_set(base_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+
+    # Tuesday, both timestamps inside the probe window (17:00-23:59), same day.
+    leave = datetime(2026, 7, 7, 17, 30)
+    enter = datetime(2026, 7, 7, 22, 0)  # 4.5h absence, cap 2h
+    coordinator._on_zone_leave(leave, base_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_PROBE_STARTED] is not None
+
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.probe_minutes == 120

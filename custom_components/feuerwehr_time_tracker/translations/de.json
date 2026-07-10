@@ -30,10 +30,12 @@
       },
       "probe_calendar": {
         "title": "Probe / Übungs-Einstellungen (Kalender)",
-        "description": "Wähle eine Kalender-Entität und gib Schlagwörter ein (kommagetrennt). Wenn ein Kalender-Ereignis aktiv ist, das eines der Schlagwörter enthält, wird die Zeit als Probe getrackt.",
+        "description": "Wähle eine Kalender-Entität und gib Schlagwörter ein (kommagetrennt). Wenn ein Kalender-Ereignis aktiv ist, das eines der Schlagwörter enthält, wird die Zeit als Probe getrackt. Optional kannst du alle übrigen Kalender-Termine (ohne Schlagwort) als Sonstiges-Zeit tracken, wenn du dafür das Gerätehaus verlässt.",
         "data": {
           "probe_calendar_entity": "Kalender-Entität",
-          "probe_keywords": "Schlagwörter (kommagetrennt, z.B. Probe,Übung,Training)"
+          "probe_keywords": "Schlagwörter (kommagetrennt, z.B. Probe,Übung,Training)",
+          "track_other_absence": "Sonstige Kalender-Termine als Sonstiges-Zeit tracken",
+          "sonstiges_max_hours": "Max. Sonstige-Termin-Dauer (Stunden)"
         }
       },
       "probe_both_day_time": {
@@ -49,10 +51,12 @@
       },
       "probe_both_calendar": {
         "title": "Probe – Kalender Einstellungen",
-        "description": "Zusätzlich zu den festen Zeiten: Kalender-Ereignisse mit Schlagwörtern lösen ebenfalls Probe-Tracking aus.",
+        "description": "Zusätzlich zu den festen Zeiten: Kalender-Ereignisse mit Schlagwörtern lösen ebenfalls Probe-Tracking aus. Optional kannst du alle übrigen Kalender-Termine (ohne Schlagwort) als Sonstiges-Zeit tracken, wenn du dafür das Gerätehaus verlässt.",
         "data": {
           "probe_calendar_entity": "Kalender-Entität",
-          "probe_keywords": "Schlagwörter (kommagetrennt, z.B. Probe,Übung,Training)"
+          "probe_keywords": "Schlagwörter (kommagetrennt, z.B. Probe,Übung,Training)",
+          "track_other_absence": "Sonstige Kalender-Termine als Sonstiges-Zeit tracken",
+          "sonstiges_max_hours": "Max. Sonstige-Termin-Dauer (Stunden)"
         }
       },
       "einsatz": {
@@ -60,6 +64,7 @@
         "description": "Einstellungen für Einsatz-Tracking und optionale Push-Benachrichtigungen.",
         "data": {
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "probe_max_hours": "Max. Proben-Dauer (Stunden)",
           "notify_service": "Notify Service (optional, z.B. notify.mobile_app_iphone)"
         }
       }
@@ -94,6 +99,7 @@
           "probe_count_start": "Minuten-Zähler Start",
           "probe_count_end": "Minuten-Zähler Ende",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "probe_max_hours": "Max. Proben-Dauer (Stunden)",
           "notify_service": "Notify Service (optional)"
         }
       },
@@ -105,7 +111,10 @@
           "alarm_sensor": "Aktiver Alarm Sensor",
           "probe_calendar_entity": "Kalender-Entität",
           "probe_keywords": "Schlagwörter (kommagetrennt)",
+          "track_other_absence": "Sonstige Kalender-Termine als Sonstiges-Zeit tracken",
+          "sonstiges_max_hours": "Max. Sonstige-Termin-Dauer (Stunden)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "probe_max_hours": "Max. Proben-Dauer (Stunden)",
           "notify_service": "Notify Service (optional)"
         }
       },
@@ -122,7 +131,10 @@
           "probe_count_end": "Minuten-Zähler Ende",
           "probe_calendar_entity": "Kalender-Entität",
           "probe_keywords": "Schlagwörter (kommagetrennt)",
+          "track_other_absence": "Sonstige Kalender-Termine als Sonstiges-Zeit tracken",
+          "sonstiges_max_hours": "Max. Sonstige-Termin-Dauer (Stunden)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
+          "probe_max_hours": "Max. Proben-Dauer (Stunden)",
           "notify_service": "Notify Service (optional)"
         }
       }

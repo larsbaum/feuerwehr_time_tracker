@@ -13,6 +13,31 @@ sinnvoll für eine HACS-Integration.
 
 ## [Unreleased]
 
+### Added
+- **Sonstige Kalender-Termine als Abwesenheit tracken:** Neuer Toggle
+  „Sonstige Kalender-Termine als Sonstiges-Zeit tracken" (nur in den Modi
+  „Kalender"/„Beides"). Ist er aktiv, werden **aktive Kalender-Termine, deren
+  Titel keines der Übungs-Schlagwörter enthält**, beim Verlassen des Gerätehauses
+  als **Sonstiges**-Abwesenheit erfasst (Verlassen startet den Timer, Rückkehr
+  addiert die verstrichene Zeit) — ideal für einen Kalender, in dem ausschließlich
+  Feuerwehr-Termine stehen (Sitzungen, Lehrgänge, Dienste außer Haus). Ein aktiver
+  Kalender-Termin ist zwingender Filter, damit nicht jedes beliebige Verlassen der
+  Zone zählt. Ist der Toggle aus, bleibt alles wie bisher.
+  - Anders als bei Proben gibt es **keinen** Tagesgrenzen-Schutz: ein sonstiger
+    Termin darf über Mitternacht laufen; einziges Limit ist der neue Regler.
+- **Zwei getrennte Zeitregler** zur Begrenzung der Abwesenheit:
+  - „Max. Proben-Dauer (Stunden)" (Default 6) — begrenzt die Proben-Abwesenheit.
+  - „Max. Sonstige-Termin-Dauer (Stunden)" (Default 6) — begrenzt die neue
+    Sonstiges-Termin-Abwesenheit.
+- Neue Tests: Sonstiges-Termin-Abwesenheit (getrackt/aus, Keyword=Probe,
+  Deckelung, Über-Nacht) und Deckelung der Proben-Abwesenheit.
+
+### Changed
+- **Proben-Abwesenheit wird jetzt gedeckelt:** Bisher war die beim Verlassen
+  während einer Probe gezählte Abwesenheit nur durch die Tagesgrenze begrenzt.
+  Neu wird sie zusätzlich auf „Max. Proben-Dauer" gekappt (Standard 6 h;
+  **gekappt, nicht verworfen** — im Unterschied zum Einsatz).
+
 ### ⚠️ BREAKING CHANGES
 - Kategorie „Gerätehaus" wurde vollständig in „Sonstiges" umbenannt:
   - **Entity:** `sensor.station_hours` → `sensor.other_hours` (Name: „Other

@@ -56,6 +56,24 @@ Erfasst alle sonstigen Stunden, die du im Gerätehaus verbringst (vormals Katego
 - Jede Minute, die du in der Zone bist und **kein** Alarm aktiv ist und **kein** Probe-Zeitfenster greift, wird als Sonstiges-Stunde gezählt.
 - Typische Beispiele: Fahrzeugpflege, Gerätewartung, Kameradschaftsabende außerhalb des Probe-Tags.
 
+#### Sonstige Kalender-Termine außerhalb des Gerätehauses *(optional)*
+
+Nutzt du einen Kalender, in dem **ausschließlich Feuerwehr-Termine** stehen, kannst
+du im Kalender-Modus den Schalter **„Sonstige Kalender-Termine als Sonstiges-Zeit
+tracken"** aktivieren. Dann wird auch Zeit *außerhalb* des Gerätehauses als
+Sonstiges erfasst, wenn der Termin **keine** Übung ist:
+
+- Ein Kalender-Termin ist aktiv, dessen Titel **keines** der Übungs-Schlagwörter
+  enthält (z. B. Sitzung, Lehrgang, Dienst außer Haus). Verlässt du dafür das
+  Gerätehaus, wird die Abwesenheit beim Zurückkommen als Sonstiges-Minuten addiert
+  – dieselbe Logik wie bei Einsatz/Probe.
+- **Wichtig:** Ein aktiver Kalender-Termin ist zwingende Voraussetzung. Verlässt du
+  die Zone ohne passenden Termin (z. B. zum Einkaufen), wird **nichts** gezählt.
+- Die Dauer wird durch den Regler **„Max. Sonstige-Termin-Dauer"** begrenzt (gekappt,
+  nicht verworfen). Anders als bei Proben gibt es hier **keinen** Tagesgrenzen-Schutz
+  – ein Termin darf über Mitternacht laufen.
+- Ist der Schalter aus, bleibt alles wie bisher (nur Übungen werden getrackt).
+
 ### 📊 Gesamt
 
 Zeigt die Summe aller drei Kategorien (Einsatz + Probe + Sonstiges) als Gesamtstunden an.
@@ -128,15 +146,18 @@ ___
 | Minuten-Zähler Ende | Bis wann | `23:00` |
 
 ### Schritt 3b – Kalender *(nur bei „Kalender" oder „Beides")*
-| Feld | Beschreibung | Beispiel |
+| Feld | Beschreibung | Beispiel / Standard |
 |------|-------------|---------|
 | Kalender-Entität | Die zu überwachende Kalender-Entität | `calendar.feuerwehr` |
 | Schlagwörter | Kommagetrennte Begriffe, die im Event-Titel vorkommen müssen | `Probe,Übung,Training` |
+| Sonstige Kalender-Termine als Sonstiges-Zeit tracken | Termine ohne Schlagwort außerhalb des Gerätehauses als Sonstiges erfassen | `aus` |
+| Max. Sonstige-Termin-Dauer | Obergrenze der Abwesenheit für sonstige Termine (Stunden) | `6` |
 
 ### Schritt 4 – Einsatz & Benachrichtigungen
 | Feld | Beschreibung | Standard |
 |------|-------------|---------|
 | Max. Einsatzdauer | Zeitfenster für gültige Rückkehr (Stunden) | `10` |
+| Max. Proben-Dauer | Obergrenze der Abwesenheit während einer Probe (Stunden) | `6` |
 | Notify Service | z.B. `notify.mobile_app_iphone` (leer = keine Benachrichtigung) | – |
 
 ---

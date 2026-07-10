@@ -24,6 +24,9 @@ CONF_PROBE_MODE = "probe_mode"
 CONF_PROBE_CALENDAR = "probe_calendar_entity"
 CONF_PROBE_KEYWORDS = "probe_keywords"
 CONF_EINSATZ_MAX_HOURS = "einsatz_max_hours"
+CONF_PROBE_MAX_HOURS = "probe_max_hours"
+CONF_TRACK_OTHER_ABSENCE = "track_other_absence"
+CONF_SONSTIGES_MAX_HOURS = "sonstiges_max_hours"
 CONF_NOTIFY_SERVICE = "notify_service"
 
 # Probe mode choices
@@ -41,6 +44,7 @@ DATA_PROBE_MINUTES = "probe_minutes"
 DATA_SONSTIGES_MINUTES = "sonstiges_minutes"
 DATA_EINSATZ_STARTED = "einsatz_started"   # timestamp float or None
 DATA_PROBE_STARTED = "probe_started"       # timestamp float or None
+DATA_SONSTIGES_STARTED = "sonstiges_started"  # timestamp float or None
 DATA_CURRENT_YEAR = "current_year"         # int or None (year the counters belong to)
 DATA_PREVIOUS_YEARS = "previous_years"     # dict[str, dict[str, int]] archived totals
 
