@@ -1,9 +1,15 @@
 """Constants for Feuerwehr Zeit-Tracker."""
+import json
+import os
 
 DOMAIN = "feuerwehr_time_tracker"
 PLATFORMS = ["sensor"]
 
-CARD_VERSION = "0.2.6"
+# Single source of truth for the integration/card version is manifest.json.
+# Bump the version there only – CARD_VERSION (used for cache-busting the
+# frontend card URL) is derived from it automatically.
+with open(os.path.join(os.path.dirname(__file__), "manifest.json"), encoding="utf-8") as _f:
+    CARD_VERSION = json.load(_f)["version"]
 
 # Config entry keys
 CONF_PERSON = "person_entity"

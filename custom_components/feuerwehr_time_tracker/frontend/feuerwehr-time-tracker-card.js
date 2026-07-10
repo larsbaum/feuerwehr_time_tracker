@@ -51,12 +51,94 @@ function valText(v) {
    CSS
    ─────────────────────────────────────────── */
 const CARD_STYLES = `
-  :host { display: block; }
+  :host { display: block; height: 100%; }
   ha-card {
     padding: 12px 14px;
     box-sizing: border-box;
     height: 100%;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .too-small {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--warning-color, #ff9800);
+    text-align: center;
+    padding: 4px;
+  }
+  .hc-row {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    gap: 8px;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .hc-row-title {
+    font-weight: 700;
+    color: var(--primary-text-color);
+    opacity: 0.95;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  .hc-total {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .hc-total-value {
+    font-weight: 800;
+    color: var(--primary-text-color);
+    line-height: 1;
+  }
+  .hc-total-label {
+    font-weight: 700;
+    color: var(--secondary-text-color);
+    white-space: nowrap;
+  }
+  .hc-chips {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .hc-chip {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+    border-radius: 10px;
+    border: 1px solid;
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .hc-chip-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  .hc-chip-value {
+    font-weight: 800;
+    color: var(--primary-text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .header {
     font-size: 15px;
@@ -73,9 +155,11 @@ const CARD_STYLES = `
   }
   .content.large {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+    flex: 1;
+    min-height: 0;
   }
   .content.large .total-section {
     align-self: center;
@@ -143,6 +227,9 @@ const CARD_STYLES = `
   .content.compact {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    justify-content: center;
   }
   .chips-grid {
     display: grid;
@@ -306,13 +393,19 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._compact = false;
+    this._w = 400;
+    this._h = 116;
     this._ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        const h = Math.round(entry.contentRect.height);
+        if (w === this._w && h === this._h) return;
+        this._w = w;
+        this._h = h;
         if (this._config.layout === "auto") {
-          const wasCompact = this._compact;
-          this._compact = entry.contentRect.width < 400;
-          if (wasCompact !== this._compact) this._render();
+          this._compact = w < 400;
         }
+        this._render();
       }
     });
   }
@@ -355,6 +448,90 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
   get hass() { return this._hass; }
   getCardSize() { return this._compact ? 3 : 2; }
 
+  getLayoutOptions() {
+    return {
+      grid_rows: this._compact ? 3 : 2,
+      grid_columns: 4,
+      grid_min_rows: 1,
+      grid_max_rows: 8,
+    };
+  }
+
+  _computeLayout(isCompact, chipCount) {
+    const w = this._w;
+    const h = this._h;
+    if (!w || !h) return { tooSmall: false, isRow: false, isCompact, pad: 12, padH: 14, titleSize: 15, chipValSize: 20, chipLblSize: 12, chipPadV: 8, chipPadH: 8, totalValSize: 32, totalLblSize: 14 };
+    if (h < 36 || w < 100) return { tooSmall: true };
+
+    const isRow = h < 90;
+    // row-mode: minimal padding; col-mode: at least 8 px for visual breathing room
+    const pad  = isRow
+      ? Math.round(Math.min(8,  Math.max(3, h * 0.07)))
+      : Math.round(Math.min(12, Math.max(8, h * 0.09)));
+    const padH   = Math.round(Math.min(14, Math.max(8, w * 0.025)));
+    const innerH = h - pad * 2;
+
+    let chipSingleH, titleSize;
+    if (isRow) {
+      titleSize   = Math.round(Math.min(14, Math.max(10, innerH * 0.27)));
+      chipSingleH = innerH;
+    } else {
+      titleSize = Math.round(Math.min(15, Math.max(11, innerH * 0.14)));
+      const mb        = Math.max(3, Math.round(pad * 0.4));
+      const titleH    = titleSize * 1.5 + mb;
+      const chipAreaH = Math.max(20, innerH - titleH);
+
+      if (isCompact) {
+        // chips are in a 2-col grid → each chip gets only 1/chipRows of chipAreaH
+        const chipRows = Math.max(1, Math.ceil((chipCount || 1) / 2));
+        chipSingleH = Math.max(16, (chipAreaH - (chipRows - 1) * 6) / chipRows);
+      } else {
+        // large mode: chip content is sized to ~75 % of chipAreaH;
+        // chips are centered via align-items in _dynStyle
+        chipSingleH = chipAreaH;
+      }
+    }
+
+    const chipValSize  = Math.round(Math.min(32, Math.max(10, chipSingleH * 0.38)));
+    const chipLblSize  = Math.round(Math.min(13, Math.max(8,  chipSingleH * 0.17)));
+    const chipPadV     = Math.round(Math.min(12, Math.max(2,  chipSingleH * 0.07)));
+    const chipPadH     = Math.round(Math.min(12, Math.max(5,  padH * 0.7)));
+    const totalValSize = Math.round(Math.min(42, Math.max(14, chipSingleH * 0.52)));
+    const totalLblSize = Math.round(Math.min(18, Math.max(9,  chipSingleH * 0.22)));
+
+    if (chipValSize < 9) return { tooSmall: true };
+    return { tooSmall: false, isRow, isCompact, pad, padH, titleSize, chipValSize, chipLblSize, chipPadV, chipPadH, totalValSize, totalLblSize };
+  }
+
+  _dynStyle({ pad, padH, titleSize, chipValSize, chipLblSize, chipPadV, chipPadH, totalValSize, totalLblSize, isRow, isCompact }) {
+    const mb = Math.max(3, Math.round(pad * 0.4));
+    // In large mode chips don't stretch; they're centered in the chips-row
+    const chipsRowExtra = (!isRow && !isCompact) ? 'align-items: center;' : '';
+    return `
+      ha-card { padding: ${pad}px ${padH}px; }
+      .header { font-size: ${titleSize}px; margin-bottom: ${mb}px; }
+      .compact-header { font-size: ${Math.min(11, titleSize)}px; margin-bottom: ${mb}px; }
+      .total-value { font-size: ${totalValSize}px; }
+      .total-label { font-size: ${totalLblSize}px; }
+      .compact-prominent .total-value { font-size: ${Math.round(totalValSize * 0.8)}px; }
+      .compact-prominent .total-label { font-size: ${Math.round(totalLblSize * 0.85)}px; }
+      .compact-prominent { margin-bottom: ${mb}px; }
+      .chip { padding: ${chipPadV}px ${chipPadH}px; }
+      .chip-label { font-size: ${chipLblSize}px; }
+      .chip-value { font-size: ${chipValSize}px; }
+      .chips-row { ${chipsRowExtra} }
+      .chip-compact { padding: ${Math.round(chipPadV * 0.8)}px ${Math.round(chipPadH * 0.8)}px; }
+      .chip-label-compact { font-size: ${Math.round(chipLblSize * 0.9)}px; }
+      .chip-value-compact { font-size: ${Math.round(chipValSize * 0.9)}px; }
+      .hc-row-title { font-size: ${titleSize}px; }
+      .hc-total-value { font-size: ${Math.round(totalValSize * 0.65)}px; }
+      .hc-total-label { font-size: ${Math.round(totalLblSize * 0.75)}px; }
+      .hc-chip { padding: ${chipPadV}px ${chipPadH}px; }
+      .hc-chip-label { font-size: ${chipLblSize}px; }
+      .hc-chip-value { font-size: ${chipValSize}px; }
+    `;
+  }
+
   _getChips() {
     const c = this._config;
     const h = this._hass;
@@ -375,9 +552,43 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
     const gesamt = getVal(h, c.entity_gesamt);
     const chips = this._getChips();
     const showProminent = c.show_total && c.total_display === "prominent";
+    const layout = this._computeLayout(this._compact, chips.length);
 
+    if (layout.tooSmall) {
+      this.shadowRoot.innerHTML = `
+        <style>${CARD_STYLES}</style>
+        <ha-card><div class="too-small">Karte zu klein</div></ha-card>
+      `;
+      return;
+    }
+
+    const dyn = this._dynStyle(layout);
     let content;
-    if (this._compact) {
+
+    if (layout.isRow) {
+      content = `
+        <div class="hc-row">
+          ${c.show_header ? `<span class="hc-row-title">${c.title}</span>` : ""}
+          ${showProminent ? `
+            <div class="hc-total">
+              <span class="hc-total-value">${fmt(gesamt)}</span>
+              <span class="hc-total-label">${c.label_gesamt}</span>
+            </div>
+          ` : ""}
+          <div class="hc-chips">
+            ${chips.map((ch) => `
+              <div class="hc-chip" style="
+                background: ${hexToRgba(ch.color, 0.12)};
+                border-color: ${hexToRgba(ch.color, 0.25)};
+              ">
+                <span class="hc-chip-label" style="color:${ch.color};">${ch.label}</span>
+                <span class="hc-chip-value">${valText(ch.value)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    } else if (this._compact) {
       content = `
         ${c.show_header ? `<div class="header compact-header">${c.title}</div>` : ""}
         <div class="content compact">
@@ -426,7 +637,7 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
     }
 
     this.shadowRoot.innerHTML = `
-      <style>${CARD_STYLES}</style>
+      <style>${CARD_STYLES}${dyn}</style>
       <ha-card>${content}</ha-card>
     `;
   }
