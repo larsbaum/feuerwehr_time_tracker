@@ -49,16 +49,24 @@ Du kannst zwischen drei Modi wählen:
 
 - Kombiniert beide Methoden. Die feste Probe am Wochentag wird **immer** getrackt, zusätzlich greifen Kalender-Ereignisse für Sondertermine.
 
-### 🏠 Gerätehaus
+### 🧰 Sonstiges
 
-Erfasst alle sonstigen Stunden, die du im Gerätehaus verbringst.
+Erfasst alle sonstigen Stunden, die du im Gerätehaus verbringst (vormals Kategorie „Gerätehaus").
 
-- Jede Minute, die du in der Zone bist und **kein** Alarm aktiv ist und **kein** Probe-Zeitfenster greift, wird als Gerätehaus-Stunde gezählt.
+- Jede Minute, die du in der Zone bist und **kein** Alarm aktiv ist und **kein** Probe-Zeitfenster greift, wird als Sonstiges-Stunde gezählt.
 - Typische Beispiele: Fahrzeugpflege, Gerätewartung, Kameradschaftsabende außerhalb des Probe-Tags.
 
 ### 📊 Gesamt
 
-Zeigt die Summe aller drei Kategorien (Einsatz + Probe + Gerätehaus) als Gesamtstunden an.
+Zeigt die Summe aller drei Kategorien (Einsatz + Probe + Sonstiges) als Gesamtstunden an.
+
+### 🗓️ Automatischer Jahreswechsel
+
+Am 1. Januar werden alle Zähler automatisch auf 0 zurückgesetzt – so zählen die Sensoren immer nur das laufende Jahr.
+
+- Die Vorjahreswerte gehen **nicht** verloren: Sie werden vor dem Reset gespeichert und sind im Sensor-Attribut `previous_years` einsehbar.
+- Jeder Kategorie-Sensor trägt seine eigenen Jahreswerte, der Gesamt-Sensor zusätzlich die volle Aufschlüsselung aller Kategorien pro Jahr.
+- Es werden keine neuen Entities angelegt – Dashboards und Automationen funktionieren unverändert weiter.
 
 ___
 
@@ -141,10 +149,12 @@ Nach der Einrichtung erstellt die Integration automatisch:
 |--------|-------------|---------|
 | `sensor.alarm_hours` | Gesamt-Einsatzstunden | h |
 | `sensor.training_hours` | Gesamt-Probestunden | h |
-| `sensor.station_hours` | Sonstige Gerätehaus-Stunden | h |
+| `sensor.other_hours` | Sonstige Stunden | h |
 | `sensor.total_hours` | Gesamtstunden (Summe aller Kategorien) | h |
 
-Alle Sensoren haben zusätzlich ein `minutes`-Attribut für präzise Auswertungen.
+Alle Sensoren haben zusätzlich ein `minutes`-Attribut für präzise Auswertungen
+sowie ein `previous_years`-Attribut mit den archivierten Werten abgeschlossener
+Jahre (siehe [Automatischer Jahreswechsel](#%EF%B8%8F-automatischer-jahreswechsel)).
 
 ---
 
@@ -156,7 +166,7 @@ Setzt eine oder alle Kategorien auf 0 zurück.
 ```yaml
 service: feuerwehr_time_tracker.reset
 data:
-  category: einsatz   # einsatz | probe | geratehaus | all
+  category: einsatz   # einsatz | probe | sonstiges | all
 ```
 
 ### `feuerwehr_time_tracker.add_minutes`
@@ -186,7 +196,7 @@ Die Integration bringt eine eigene Dashboard-Karte mit, die direkt über den vis
 | Option | Beschreibung |
 |--------|-------------|
 | Layout | Automatisch (responsive), Groß oder Kompakt |
-| Kategorien | Einsatz, Probe, Gerätehaus und Gesamt einzeln ein-/ausblenden |
+| Kategorien | Einsatz, Probe, Sonstiges und Gesamt einzeln ein-/ausblenden |
 | Bezeichnungen | Eigene Labels pro Kategorie |
 | Farben | Individuelle Farbe pro Kategorie |
 | Reihenfolge | Kategorien per Pfeil-Buttons umsortieren |

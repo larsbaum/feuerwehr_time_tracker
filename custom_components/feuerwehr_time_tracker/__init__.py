@@ -8,8 +8,9 @@ import voluptuous as vol
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     DOMAIN,
@@ -33,12 +34,12 @@ from .coordinator import FeuerwehrCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_RESET_SCHEMA = vol.Schema({
-    vol.Required("category"): vol.In(["einsatz", "probe", "geratehaus", "all"]),
+    vol.Required("category"): vol.In(["einsatz", "probe", "sonstiges", "all"]),
     vol.Optional("entry_id"): str,
 })
 
 SERVICE_ADD_MINUTES_SCHEMA = vol.Schema({
-    vol.Required("category"): vol.In(["einsatz", "probe", "geratehaus"]),
+    vol.Required("category"): vol.In(["einsatz", "probe", "sonstiges"]),
     vol.Required("minutes"): vol.Coerce(int),
     vol.Optional("entry_id"): str,
 })
@@ -63,9 +64,52 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     return True
 
 
+@callback
+def _async_migrate_geratehaus_entity(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Migrate the legacy 'geratehaus' sensor to the new 'sonstiges' identity.
+
+    Renames unique_id `<entry_id>_geratehaus` -> `<entry_id>_sonstiges` and
+    (if free) the entity_id `sensor.station_hours` -> `sensor.other_hours`.
+    Idempotent: after the first run the legacy unique_id no longer exists.
+    """
+    registry = er.async_get(hass)
+    old_entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_geratehaus"
+    )
+    if old_entity_id is None:
+        return
+
+    new_unique_id = f"{entry.entry_id}_sonstiges"
+    new_entity_id = "sensor.other_hours"
+    if registry.async_get(new_entity_id) is not None:
+        # entity_id already taken (e.g. second config entry) – keep the old
+        # entity_id, only migrate the unique_id.
+        registry.async_update_entity(old_entity_id, new_unique_id=new_unique_id)
+        _LOGGER.warning(
+            "Migrated unique_id of %s to '_sonstiges', but %s is already taken – "
+            "entity_id was kept",
+            old_entity_id,
+            new_entity_id,
+        )
+    else:
+        registry.async_update_entity(
+            old_entity_id,
+            new_unique_id=new_unique_id,
+            new_entity_id=new_entity_id,
+        )
+        _LOGGER.info(
+            "Migrated entity %s -> %s (unique_id '_geratehaus' -> '_sonstiges')",
+            old_entity_id,
+            new_entity_id,
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Feuerwehr Zeit-Tracker from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+
+    # One-time migration of the renamed "Gerätehaus" -> "Sonstiges" sensor
+    _async_migrate_geratehaus_entity(hass, entry)
 
     # Merge entry.data and entry.options (options override data on reconfigure)
     config = {**entry.data, **entry.options}

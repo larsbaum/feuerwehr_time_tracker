@@ -33,9 +33,12 @@ from .const import (
     CONF_NOTIFY_SERVICE,
     DATA_EINSATZ_MINUTES,
     DATA_PROBE_MINUTES,
-    DATA_GERATEHAUS_MINUTES,
+    DATA_SONSTIGES_MINUTES,
     DATA_EINSATZ_STARTED,
     DATA_PROBE_STARTED,
+    DATA_CURRENT_YEAR,
+    DATA_PREVIOUS_YEARS,
+    LEGACY_DATA_GERATEHAUS_MINUTES,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
     PROBE_MODE_BOTH,
@@ -86,14 +89,17 @@ class FeuerwehrCoordinator:
         self._data: dict[str, Any] = {
             DATA_EINSATZ_MINUTES: 0,
             DATA_PROBE_MINUTES: 0,
-            DATA_GERATEHAUS_MINUTES: 0,
+            DATA_SONSTIGES_MINUTES: 0,
             DATA_EINSATZ_STARTED: None,
             DATA_PROBE_STARTED: None,
+            DATA_CURRENT_YEAR: None,
+            DATA_PREVIOUS_YEARS: {},
         }
 
         self._unsub_zone = None
         self._unsub_timer = None
         self._listeners: list[callback] = []
+        self._rollover_in_progress = False
 
     # ------------------------------------------------------------------
     # Public properties
@@ -108,12 +114,16 @@ class FeuerwehrCoordinator:
         return int(self._data.get(DATA_PROBE_MINUTES, 0))
 
     @property
-    def geratehaus_minutes(self) -> int:
-        return int(self._data.get(DATA_GERATEHAUS_MINUTES, 0))
+    def sonstiges_minutes(self) -> int:
+        return int(self._data.get(DATA_SONSTIGES_MINUTES, 0))
 
     @property
     def gesamt_minutes(self) -> int:
-        return self.einsatz_minutes + self.probe_minutes + self.geratehaus_minutes
+        return self.einsatz_minutes + self.probe_minutes + self.sonstiges_minutes
+
+    def get_previous_years_data(self) -> dict[str, dict[str, int]]:
+        """Return a copy of the archived per-year totals."""
+        return dict(self._data.get(DATA_PREVIOUS_YEARS, {}))
 
     def get_cfg(self, key: str, default=None):
         """Get effective config value (options override data)."""
@@ -208,6 +218,18 @@ class FeuerwehrCoordinator:
         if stored:
             self._data.update(stored)
             _LOGGER.debug("Loaded stored data: %s", self._data)
+
+        # Migration: rename legacy "geratehaus_minutes" key to "sonstiges_minutes".
+        # Idempotent – after the first run the legacy key is gone from the store.
+        if LEGACY_DATA_GERATEHAUS_MINUTES in self._data:
+            legacy_minutes = int(self._data.pop(LEGACY_DATA_GERATEHAUS_MINUTES) or 0)
+            if int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) == 0:
+                self._data[DATA_SONSTIGES_MINUTES] = legacy_minutes
+            await self._store.async_save(self._data)
+            _LOGGER.info(
+                "Migrated stored minutes: geratehaus_minutes -> sonstiges_minutes (%d min)",
+                self._data[DATA_SONSTIGES_MINUTES],
+            )
 
         person = self.get_cfg(CONF_PERSON)
 
@@ -331,6 +353,14 @@ class FeuerwehrCoordinator:
     @callback
     def _handle_minute_tick(self, _now: datetime) -> None:
         """Every minute: if person is in zone, increment appropriate counter."""
+        now = dt_util.now()
+
+        # Year rollover must be checked unconditionally – BEFORE the presence
+        # early-return below. Otherwise the reset would fire hours late (only
+        # once the person re-enters the zone) and new-year minutes would leak
+        # into the archived previous-year totals.
+        self._check_year_rollover(now)
+
         person = self.get_cfg(CONF_PERSON)
         zone = self._get_zone_name()
         alarm = self.get_cfg(CONF_ALARM, "")
@@ -342,9 +372,7 @@ class FeuerwehrCoordinator:
         alarm_state = self.hass.states.get(alarm)
         alarm_on = alarm_state and alarm_state.state == "on"
 
-        now = dt_util.now()
-
-        # Einsatz: alarm active → count as Einsatz, not Gerätehaus
+        # Einsatz: alarm active → count as Einsatz, not Sonstiges
         if alarm_on:
             self._data[DATA_EINSATZ_MINUTES] = int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + 1
             _LOGGER.debug("Einsatz minute tick (in zone): total=%d", self._data[DATA_EINSATZ_MINUTES])
@@ -353,12 +381,77 @@ class FeuerwehrCoordinator:
             self._data[DATA_PROBE_MINUTES] = int(self._data.get(DATA_PROBE_MINUTES, 0)) + 1
             _LOGGER.debug("Probe minute tick: total=%d", self._data[DATA_PROBE_MINUTES])
         else:
-            # Gerätehaus counting
-            self._data[DATA_GERATEHAUS_MINUTES] = int(self._data.get(DATA_GERATEHAUS_MINUTES, 0)) + 1
-            _LOGGER.debug("Gerätehaus minute tick: total=%d", self._data[DATA_GERATEHAUS_MINUTES])
+            # Sonstiges counting
+            self._data[DATA_SONSTIGES_MINUTES] = int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) + 1
+            _LOGGER.debug("Sonstiges minute tick: total=%d", self._data[DATA_SONSTIGES_MINUTES])
 
         self._notify_sensors()
         self.hass.async_create_task(self._async_save())
+
+    # ------------------------------------------------------------------
+    # Year rollover (archive + reset)
+    # ------------------------------------------------------------------
+
+    @callback
+    def _check_year_rollover(self, now: datetime) -> None:
+        """Detect a year change and trigger archive + reset exactly once."""
+        if self._rollover_in_progress:
+            return
+
+        stored_year = self._data.get(DATA_CURRENT_YEAR)
+
+        if stored_year is None:
+            # First load ever (fresh install or upgrade from a version without
+            # year tracking): establish the baseline year WITHOUT archiving –
+            # there is no completed previous year to archive yet.
+            self._data[DATA_CURRENT_YEAR] = now.year
+            self.hass.async_create_task(self._async_save())
+            return
+
+        if now.year == stored_year:
+            return
+
+        self._rollover_in_progress = True
+        self.hass.async_create_task(
+            self._async_perform_rollover(int(stored_year), now.year)
+        )
+
+    async def _async_perform_rollover(self, old_year: int, new_year: int) -> None:
+        """Archive the finished year's totals, then reset the counters.
+
+        Ordering is crash-safe: the archive is persisted to the store FIRST
+        (while the counters still hold their old values). Only after that
+        save succeeds are the counters zeroed and saved again. If HA dies
+        in between, the next startup re-runs the rollover idempotently –
+        no minutes are ever lost.
+        """
+        try:
+            # Step 1: archive in memory (counters untouched).
+            previous_years = dict(self._data.get(DATA_PREVIOUS_YEARS, {}))
+            previous_years[str(old_year)] = {
+                DATA_EINSATZ_MINUTES: self.einsatz_minutes,
+                DATA_PROBE_MINUTES: self.probe_minutes,
+                DATA_SONSTIGES_MINUTES: self.sonstiges_minutes,
+            }
+            self._data[DATA_PREVIOUS_YEARS] = previous_years
+
+            # Step 2: persist the archive BEFORE touching the counters.
+            await self._store.async_save(self._data)
+
+            # Step 3: now it is safe to reset (gesamt is computed → follows).
+            self._data[DATA_EINSATZ_MINUTES] = 0
+            self._data[DATA_PROBE_MINUTES] = 0
+            self._data[DATA_SONSTIGES_MINUTES] = 0
+            self._data[DATA_CURRENT_YEAR] = new_year
+
+            # Step 4: push to sensors and persist the reset state.
+            self._notify_sensors()
+            await self._store.async_save(self._data)
+            _LOGGER.info(
+                "Year rollover: archived %d, counters reset for %d", old_year, new_year
+            )
+        finally:
+            self._rollover_in_progress = False
 
     # ------------------------------------------------------------------
     # Services
@@ -369,13 +462,13 @@ class FeuerwehrCoordinator:
         key_map = {
             "einsatz": DATA_EINSATZ_MINUTES,
             "probe": DATA_PROBE_MINUTES,
-            "geratehaus": DATA_GERATEHAUS_MINUTES,
+            "sonstiges": DATA_SONSTIGES_MINUTES,
             "all": None,
         }
         if category == "all":
             self._data[DATA_EINSATZ_MINUTES] = 0
             self._data[DATA_PROBE_MINUTES] = 0
-            self._data[DATA_GERATEHAUS_MINUTES] = 0
+            self._data[DATA_SONSTIGES_MINUTES] = 0
         elif category in key_map:
             self._data[key_map[category]] = 0
 
@@ -388,7 +481,7 @@ class FeuerwehrCoordinator:
         key_map = {
             "einsatz": DATA_EINSATZ_MINUTES,
             "probe": DATA_PROBE_MINUTES,
-            "geratehaus": DATA_GERATEHAUS_MINUTES,
+            "sonstiges": DATA_SONSTIGES_MINUTES,
         }
         if category in key_map:
             current = int(self._data.get(key_map[category], 0))

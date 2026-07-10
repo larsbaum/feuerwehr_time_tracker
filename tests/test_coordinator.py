@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 
 from custom_components.feuerwehr_time_tracker.const import (
     CONF_ALARM,
@@ -11,7 +12,14 @@ from custom_components.feuerwehr_time_tracker.const import (
     CONF_PERSON,
     CONF_PROBE_MODE,
     CONF_ZONE,
+    DATA_CURRENT_YEAR,
+    DATA_EINSATZ_MINUTES,
+    DATA_PREVIOUS_YEARS,
+    DATA_PROBE_MINUTES,
+    DATA_SONSTIGES_MINUTES,
     PROBE_MODE_DAY_TIME,
+    STORAGE_KEY,
+    STORAGE_VERSION,
 )
 from custom_components.feuerwehr_time_tracker.coordinator import FeuerwehrCoordinator
 
@@ -73,7 +81,7 @@ async def test_reset_all_categories(hass: HomeAssistant, base_config):
     coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
     coordinator.add_minutes("einsatz", 20)
     coordinator.add_minutes("probe", 15)
-    coordinator.add_minutes("geratehaus", 5)
+    coordinator.add_minutes("sonstiges", 5)
     await hass.async_block_till_done()
 
     coordinator.reset_category("all")
@@ -93,10 +101,10 @@ async def test_minute_tick_counts_as_einsatz_when_alarm_active(
 
     assert coordinator.einsatz_minutes == 1
     assert coordinator.probe_minutes == 0
-    assert coordinator.geratehaus_minutes == 0
+    assert coordinator.sonstiges_minutes == 0
 
 
-async def test_minute_tick_counts_as_geratehaus_outside_probe_window(
+async def test_minute_tick_counts_as_sonstiges_outside_probe_window(
     hass: HomeAssistant, base_config
 ):
     _set_in_zone(hass, base_config, alarm_on=False)
@@ -111,7 +119,7 @@ async def test_minute_tick_counts_as_geratehaus_outside_probe_window(
         coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
-    assert coordinator.geratehaus_minutes == 1
+    assert coordinator.sonstiges_minutes == 1
     assert coordinator.probe_minutes == 0
     assert coordinator.einsatz_minutes == 0
 
@@ -132,7 +140,7 @@ async def test_minute_tick_counts_as_probe_during_configured_window(
     await hass.async_block_till_done()
 
     assert coordinator.probe_minutes == 1
-    assert coordinator.geratehaus_minutes == 0
+    assert coordinator.sonstiges_minutes == 0
     assert coordinator.einsatz_minutes == 0
 
 
@@ -150,3 +158,253 @@ async def test_minute_tick_ignores_person_outside_zone(
     await hass.async_block_till_done()
 
     assert coordinator.gesamt_minutes == 0
+
+
+# ----------------------------------------------------------------------
+# Storage migration (geratehaus_minutes -> sonstiges_minutes)
+# ----------------------------------------------------------------------
+
+
+async def test_storage_migration_geratehaus_to_sonstiges(
+    hass: HomeAssistant, base_config
+):
+    """Legacy stored data must be migrated without losing any minutes."""
+    store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_test_entry")
+    await store.async_save(
+        {
+            "einsatz_minutes": 60,
+            "probe_minutes": 30,
+            "geratehaus_minutes": 123,
+            "einsatz_started": None,
+            "probe_started": None,
+        }
+    )
+
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    await coordinator.async_setup()
+    try:
+        assert coordinator.sonstiges_minutes == 123
+        assert coordinator.einsatz_minutes == 60
+        assert coordinator.probe_minutes == 30
+        assert "geratehaus_minutes" not in coordinator._data
+
+        # Migration must already be persisted
+        await hass.async_block_till_done()
+        stored = await store.async_load()
+        assert stored[DATA_SONSTIGES_MINUTES] == 123
+        assert "geratehaus_minutes" not in stored
+    finally:
+        await coordinator.async_shutdown()
+
+
+# ----------------------------------------------------------------------
+# Year rollover (archive + reset)
+# ----------------------------------------------------------------------
+
+
+def _set_not_home(hass: HomeAssistant, config: dict) -> None:
+    hass.states.async_set(
+        config[CONF_ZONE], "zoning", {"friendly_name": ZONE_FRIENDLY_NAME}
+    )
+    hass.states.async_set(config[CONF_PERSON], "not_home")
+    hass.states.async_set(config[CONF_ALARM], "off")
+
+
+async def test_first_load_sets_current_year_without_archiving(
+    hass: HomeAssistant, base_config
+):
+    """First tick ever must only establish the baseline year, never archive."""
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+
+    now = datetime(2026, 7, 8, 12, 0)
+    with patch(
+        "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+        return_value=now,
+    ):
+        coordinator._handle_minute_tick(None)
+    await hass.async_block_till_done()
+
+    assert coordinator._data[DATA_CURRENT_YEAR] == 2026
+    assert coordinator.get_previous_years_data() == {}
+
+
+async def test_year_rollover_archives_and_resets(hass: HomeAssistant, base_config):
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    coordinator.add_minutes("einsatz", 120)
+    coordinator.add_minutes("probe", 90)
+    coordinator.add_minutes("sonstiges", 45)
+    await hass.async_block_till_done()
+    coordinator._data[DATA_CURRENT_YEAR] = 2026
+
+    new_year = datetime(2027, 1, 1, 0, 1)
+    with patch(
+        "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+        return_value=new_year,
+    ):
+        coordinator._handle_minute_tick(None)
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 0
+    assert coordinator.probe_minutes == 0
+    assert coordinator.sonstiges_minutes == 0
+    assert coordinator.gesamt_minutes == 0
+    assert coordinator._data[DATA_CURRENT_YEAR] == 2027
+
+    archived = coordinator.get_previous_years_data()["2026"]
+    assert archived[DATA_EINSATZ_MINUTES] == 120
+    assert archived[DATA_PROBE_MINUTES] == 90
+    assert archived[DATA_SONSTIGES_MINUTES] == 45
+
+
+async def test_year_rollover_only_fires_once(hass: HomeAssistant, base_config):
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    coordinator.add_minutes("einsatz", 10)
+    await hass.async_block_till_done()
+    coordinator._data[DATA_CURRENT_YEAR] = 2026
+
+    new_year = datetime(2027, 1, 1, 0, 1)
+    with patch(
+        "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+        return_value=new_year,
+    ):
+        coordinator._handle_minute_tick(None)
+        await hass.async_block_till_done()
+        # Second tick in the same (new) year must be a no-op
+        coordinator._handle_minute_tick(None)
+        await hass.async_block_till_done()
+
+    assert coordinator.get_previous_years_data() == {
+        "2026": {
+            DATA_EINSATZ_MINUTES: 10,
+            DATA_PROBE_MINUTES: 0,
+            DATA_SONSTIGES_MINUTES: 0,
+        }
+    }
+    assert coordinator.einsatz_minutes == 0
+
+
+async def test_year_rollover_detected_while_person_absent(
+    hass: HomeAssistant, base_config
+):
+    """Rollover must fire even when the person is not in the zone at midnight."""
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    coordinator.add_minutes("sonstiges", 200)
+    await hass.async_block_till_done()
+    coordinator._data[DATA_CURRENT_YEAR] = 2026
+
+    new_year = datetime(2027, 1, 1, 0, 1)
+    with patch(
+        "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+        return_value=new_year,
+    ):
+        coordinator._handle_minute_tick(None)
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 0
+    assert coordinator.get_previous_years_data()["2026"][DATA_SONSTIGES_MINUTES] == 200
+
+
+async def test_year_rollover_survives_offline_gap(hass: HomeAssistant, base_config):
+    """HA offline across New Year (e.g. restart on Jan 3): exactly one archive."""
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    coordinator.add_minutes("einsatz", 55)
+    await hass.async_block_till_done()
+    coordinator._data[DATA_CURRENT_YEAR] = 2026
+
+    jan_third = datetime(2027, 1, 3, 9, 30)
+    with patch(
+        "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+        return_value=jan_third,
+    ):
+        coordinator._handle_minute_tick(None)
+    await hass.async_block_till_done()
+
+    previous = coordinator.get_previous_years_data()
+    assert list(previous.keys()) == ["2026"]
+    assert previous["2026"][DATA_EINSATZ_MINUTES] == 55
+    assert coordinator.einsatz_minutes == 0
+    assert coordinator._data[DATA_CURRENT_YEAR] == 2027
+
+
+async def test_upgrade_from_old_storage_does_not_archive(
+    hass: HomeAssistant, base_config
+):
+    """Stored data without current_year (pre-feature) must not create an archive."""
+    store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_test_entry")
+    await store.async_save(
+        {
+            "einsatz_minutes": 300,
+            "probe_minutes": 100,
+            "sonstiges_minutes": 50,
+            "einsatz_started": None,
+            "probe_started": None,
+        }
+    )
+
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    await coordinator.async_setup()
+    try:
+        now = datetime(2026, 7, 8, 12, 0)
+        with patch(
+            "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+            return_value=now,
+        ):
+            coordinator._handle_minute_tick(None)
+        await hass.async_block_till_done()
+
+        # Counters untouched, baseline year established, no phantom archive
+        assert coordinator.einsatz_minutes == 300
+        assert coordinator.get_previous_years_data() == {}
+        assert coordinator._data[DATA_CURRENT_YEAR] == 2026
+    finally:
+        await coordinator.async_shutdown()
+
+
+async def test_rollover_persists_archive_before_reset(
+    hass: HomeAssistant, base_config
+):
+    """The archive must hit the store BEFORE the counters are zeroed."""
+    _set_not_home(hass, base_config)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    coordinator.add_minutes("einsatz", 42)
+    await hass.async_block_till_done()
+    coordinator._data[DATA_CURRENT_YEAR] = 2026
+
+    saved_snapshots = []
+    original_save = coordinator._store.async_save
+
+    async def spy_save(data):
+        # Deep-ish copy of the relevant fields at save time
+        saved_snapshots.append(
+            {
+                "einsatz": data.get(DATA_EINSATZ_MINUTES),
+                "previous_years": {
+                    k: dict(v) for k, v in data.get(DATA_PREVIOUS_YEARS, {}).items()
+                },
+            }
+        )
+        await original_save(data)
+
+    new_year = datetime(2027, 1, 1, 0, 1)
+    with patch.object(coordinator._store, "async_save", side_effect=spy_save), patch(
+        "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
+        return_value=new_year,
+    ):
+        coordinator._handle_minute_tick(None)
+        await hass.async_block_till_done()
+
+    # First save: archive present AND counters still hold the old values.
+    first = saved_snapshots[0]
+    assert first["previous_years"]["2026"][DATA_EINSATZ_MINUTES] == 42
+    assert first["einsatz"] == 42
+
+    # Final state: counters reset.
+    last = saved_snapshots[-1]
+    assert last["einsatz"] == 0
+    assert last["previous_years"]["2026"][DATA_EINSATZ_MINUTES] == 42

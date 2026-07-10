@@ -4,14 +4,14 @@ reset:
   fields:
     category:
       name: Kategorie
-      description: "Welche Kategorie zurücksetzen: einsatz | probe | geratehaus | all"
+      description: "Welche Kategorie zurücksetzen: einsatz | probe | sonstiges | all"
       required: true
       selector:
         select:
           options:
             - einsatz
             - probe
-            - geratehaus
+            - sonstiges
             - all
     entry_id:
       name: Entry ID (optional)
@@ -26,14 +26,14 @@ add_minutes:
   fields:
     category:
       name: Kategorie
-      description: "Ziel-Kategorie: einsatz | probe | geratehaus"
+      description: "Ziel-Kategorie: einsatz | probe | sonstiges"
       required: true
       selector:
         select:
           options:
             - einsatz
             - probe
-            - geratehaus
+            - sonstiges
     minutes:
       name: Minuten
       description: Anzahl Minuten (negativ zum Abziehen, Minimum ist 0)

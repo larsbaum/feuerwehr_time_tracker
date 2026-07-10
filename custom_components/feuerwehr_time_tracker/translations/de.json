@@ -135,7 +135,7 @@
       "fields": {
         "category": {
           "name": "Kategorie",
-          "description": "einsatz | probe | geratehaus | all"
+          "description": "einsatz | probe | sonstiges | all"
         },
         "entry_id": {
           "name": "Entry ID (optional)",
@@ -149,7 +149,7 @@
       "fields": {
         "category": {
           "name": "Kategorie",
-          "description": "einsatz | probe | geratehaus"
+          "description": "einsatz | probe | sonstiges"
         },
         "minutes": {
           "name": "Minuten",

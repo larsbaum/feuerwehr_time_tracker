@@ -13,9 +13,12 @@ from .const import (
     DOMAIN,
     SENSOR_EINSATZ,
     SENSOR_PROBE,
-    SENSOR_GERATEHAUS,
+    SENSOR_SONSTIGES,
     SENSOR_GESAMT,
     CONF_PERSON,
+    DATA_EINSATZ_MINUTES,
+    DATA_PROBE_MINUTES,
+    DATA_SONSTIGES_MINUTES,
 )
 from .coordinator import FeuerwehrCoordinator
 
@@ -59,8 +62,8 @@ async def async_setup_entry(
         FeuerwehrSensor(
             coordinator=coordinator,
             entry_id=entry.entry_id,
-            category=SENSOR_GERATEHAUS,
-            name="Station Hours",
+            category=SENSOR_SONSTIGES,
+            name="Other Hours",
             icon="mdi:home-group",
             device_info=device_info,
         ),
@@ -100,29 +103,59 @@ class FeuerwehrSensor(SensorEntity):
         self._attr_unique_id = f"{entry_id}_{category}"
         self._attr_device_info = device_info
 
+    def _current_minutes(self) -> int:
+        """Live minutes for this sensor's category."""
+        return {
+            SENSOR_EINSATZ: self._coordinator.einsatz_minutes,
+            SENSOR_PROBE: self._coordinator.probe_minutes,
+            SENSOR_SONSTIGES: self._coordinator.sonstiges_minutes,
+            SENSOR_GESAMT: self._coordinator.gesamt_minutes,
+        }.get(self._category, 0)
+
     @property
     def native_value(self) -> float:
         """Return hours, rounded to 2 decimals."""
-        minutes = {
-            SENSOR_EINSATZ: self._coordinator.einsatz_minutes,
-            SENSOR_PROBE: self._coordinator.probe_minutes,
-            SENSOR_GERATEHAUS: self._coordinator.geratehaus_minutes,
-            SENSOR_GESAMT: self._coordinator.gesamt_minutes,
-        }.get(self._category, 0)
-        return round(minutes / 60, 2)
+        return round(self._current_minutes() / 60, 2)
 
     @property
     def extra_state_attributes(self) -> dict:
-        minutes = {
-            SENSOR_EINSATZ: self._coordinator.einsatz_minutes,
-            SENSOR_PROBE: self._coordinator.probe_minutes,
-            SENSOR_GERATEHAUS: self._coordinator.geratehaus_minutes,
-            SENSOR_GESAMT: self._coordinator.gesamt_minutes,
-        }.get(self._category, 0)
-        return {
+        minutes = self._current_minutes()
+        attrs = {
             "minutes": minutes,
             "hours": round(minutes / 60, 2),
         }
+
+        previous_years = self._coordinator.get_previous_years_data()
+        if self._category == SENSOR_GESAMT:
+            # Full per-category breakdown on the total sensor
+            attrs["previous_years"] = {
+                year: {
+                    "einsatz_minutes": data.get(DATA_EINSATZ_MINUTES, 0),
+                    "einsatz_hours": round(data.get(DATA_EINSATZ_MINUTES, 0) / 60, 2),
+                    "probe_minutes": data.get(DATA_PROBE_MINUTES, 0),
+                    "probe_hours": round(data.get(DATA_PROBE_MINUTES, 0) / 60, 2),
+                    "sonstiges_minutes": data.get(DATA_SONSTIGES_MINUTES, 0),
+                    "sonstiges_hours": round(data.get(DATA_SONSTIGES_MINUTES, 0) / 60, 2),
+                    "gesamt_minutes": sum(data.values()),
+                    "gesamt_hours": round(sum(data.values()) / 60, 2),
+                }
+                for year, data in previous_years.items()
+            }
+        else:
+            data_key = {
+                SENSOR_EINSATZ: DATA_EINSATZ_MINUTES,
+                SENSOR_PROBE: DATA_PROBE_MINUTES,
+                SENSOR_SONSTIGES: DATA_SONSTIGES_MINUTES,
+            }.get(self._category)
+            if data_key:
+                attrs["previous_years"] = {
+                    year: {
+                        "minutes": data.get(data_key, 0),
+                        "hours": round(data.get(data_key, 0) / 60, 2),
+                    }
+                    for year, data in previous_years.items()
+                }
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         """Register with coordinator for updates."""

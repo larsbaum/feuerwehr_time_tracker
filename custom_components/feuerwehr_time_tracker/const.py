@@ -38,14 +38,20 @@ STORAGE_VERSION = 1
 # Data store keys
 DATA_EINSATZ_MINUTES = "einsatz_minutes"
 DATA_PROBE_MINUTES = "probe_minutes"
-DATA_GERATEHAUS_MINUTES = "geratehaus_minutes"
+DATA_SONSTIGES_MINUTES = "sonstiges_minutes"
 DATA_EINSATZ_STARTED = "einsatz_started"   # timestamp float or None
 DATA_PROBE_STARTED = "probe_started"       # timestamp float or None
+DATA_CURRENT_YEAR = "current_year"         # int or None (year the counters belong to)
+DATA_PREVIOUS_YEARS = "previous_years"     # dict[str, dict[str, int]] archived totals
+
+# Legacy keys (pre-rename "geratehaus" -> "sonstiges"), only used for migration
+LEGACY_DATA_GERATEHAUS_MINUTES = "geratehaus_minutes"
+LEGACY_SENSOR_GERATEHAUS = "geratehaus"
 
 # Sensor unique id suffixes
 SENSOR_EINSATZ = "einsatz"
 SENSOR_PROBE = "probe"
-SENSOR_GERATEHAUS = "geratehaus"
+SENSOR_SONSTIGES = "sonstiges"
 SENSOR_GESAMT = "gesamt"
 
 # Services

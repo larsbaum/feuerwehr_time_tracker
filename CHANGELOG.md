@@ -13,6 +13,48 @@ sinnvoll für eine HACS-Integration.
 
 ## [Unreleased]
 
+### ⚠️ BREAKING CHANGES
+- Kategorie „Gerätehaus" wurde vollständig in „Sonstiges" umbenannt:
+  - **Entity:** `sensor.station_hours` → `sensor.other_hours` (Name: „Other
+    Hours"). Bestehende Installationen werden beim ersten Start automatisch
+    migriert (Entity-Registry-Eintrag inkl. `unique_id` wird umgeschrieben,
+    Zählerstände bleiben vollständig erhalten – kein Datenverlust).
+    **Dashboards und Automationen, die `sensor.station_hours` referenzieren,
+    müssen einmalig auf `sensor.other_hours` umgestellt werden.** Die
+    HA-Langzeitstatistik läuft unter der neuen Entity-ID neu an; die
+    Historie der alten ID bleibt in der Datenbank erhalten.
+  - **Service-Kategoriewert:** `category: geratehaus` → `category: sonstiges`
+    (betrifft `feuerwehr_time_tracker.reset` und
+    `feuerwehr_time_tracker.add_minutes`). **Automationen/Skripte mit
+    `category: geratehaus` müssen angepasst werden** (werden sonst mit
+    Validierungsfehler abgelehnt).
+  - **Dashboard-Karte:** Die Config-Schlüssel `show_geratehaus`,
+    `color_geratehaus`, `label_geratehaus`, `entity_geratehaus` sowie der
+    Eintrag `geratehaus` in `category_order` heißen jetzt `…sonstiges`.
+    **Bestehende Karten-Anpassungen für diese Kategorie müssen einmalig neu
+    gesetzt werden.** Die Karte crasht mit alten Configs nicht: unbekannte
+    Schlüssel werden ignoriert (Defaults greifen) und die Kategorie-Reihenfolge
+    wird automatisch bereinigt/ergänzt.
+  - **Storage:** Gespeicherte Zählerstände werden beim ersten Start
+    automatisch migriert (`geratehaus_minutes` → `sonstiges_minutes`),
+    es gehen keine Daten verloren.
+
+### Added
+- **Automatischer Jahreswechsel-Reset:** Am 1. Januar werden die drei
+  Stundenzähler (Einsatz/Probe/Sonstiges) automatisch auf 0 zurückgesetzt,
+  sodass die Sensoren immer nur das laufende Jahr zählen. Die Vorjahreswerte
+  gehen nicht verloren: Sie werden **vor** dem Reset persistent archiviert
+  (crash-sicher – das Archiv wird zuerst gespeichert, erst danach werden die
+  Zähler genullt) und sind im neuen Sensor-Attribut `previous_years`
+  einsehbar (pro Kategorie-Sensor der eigene Jahreswert in Minuten/Stunden,
+  am Gesamt-Sensor die volle Aufschlüsselung aller Kategorien). Es werden
+  keine neuen Entities angelegt und keine bestehenden Entities umbenannt.
+  Funktioniert auch, wenn Home Assistant über den Jahreswechsel offline war
+  (Reset wird beim nächsten Start nachgeholt).
+- Neue Tests: Storage-Migration, Entity-Registry-Migration (inkl.
+  Kollisionsfall bei mehreren Instanzen) und Jahreswechsel-Logik
+  (Archivierung, Idempotenz, Offline-Lücke, Save-vor-Reset-Reihenfolge).
+
 ## [0.2.7] - 2026-07-10
 
 ### Added

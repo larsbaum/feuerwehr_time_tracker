@@ -7,19 +7,30 @@ const DEFAULTS = {
   layout: "auto",
   show_einsatz: true,
   show_probe: true,
-  show_geratehaus: true,
+  show_sonstiges: true,
   show_total: true,
   total_display: "prominent",
   color_einsatz: "#e53935",
   color_probe: "#1e88e5",
-  color_geratehaus: "#43a047",
+  color_sonstiges: "#43a047",
   color_gesamt: "#888888",
   label_einsatz: "Einsatz",
   label_probe: "Probe",
-  label_geratehaus: "Gerätehaus",
+  label_sonstiges: "Sonstiges",
   label_gesamt: "Gesamt",
-  category_order: ["einsatz", "probe", "geratehaus", "gesamt"],
+  category_order: ["einsatz", "probe", "sonstiges", "gesamt"],
 };
+
+function normalizeCategoryOrder(order) {
+  // Drop unknown keys (e.g. legacy "geratehaus" from old stored configs)
+  // and append any missing known categories so none silently disappear.
+  const known = DEFAULTS.category_order;
+  const cleaned = (Array.isArray(order) ? order : []).filter((k) => known.includes(k));
+  for (const k of known) {
+    if (!cleaned.includes(k)) cleaned.push(k);
+  }
+  return cleaned;
+}
 
 function hexToRgba(hex, alpha) {
   if (!hex || typeof hex !== "string" || !hex.startsWith("#") || hex.length < 7) {
@@ -426,19 +437,17 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
       ...DEFAULTS,
       entity_einsatz: find("alarm_hours"),
       entity_probe: find("training_hours"),
-      entity_geratehaus: find("station_hours"),
+      entity_sonstiges: find("other_hours"),
       entity_gesamt: find("total_hours"),
     };
   }
 
   setConfig(config) {
-    if (!config.entity_einsatz && !config.entity_probe && !config.entity_geratehaus && !config.entity_gesamt) {
+    if (!config.entity_einsatz && !config.entity_probe && !config.entity_sonstiges && !config.entity_gesamt) {
       throw new Error("Bitte mindestens eine Entity konfigurieren.");
     }
     this._config = { ...DEFAULTS, ...config };
-    if (!Array.isArray(this._config.category_order)) {
-      this._config.category_order = [...DEFAULTS.category_order];
-    }
+    this._config.category_order = normalizeCategoryOrder(this._config.category_order);
     if (this._config.layout === "large") this._compact = false;
     if (this._config.layout === "compact") this._compact = true;
     this._render();
@@ -538,7 +547,7 @@ class FeuerwehrTimeTrackerCard extends HTMLElement {
     const all = {
       einsatz: { label: c.label_einsatz, value: getVal(h, c.entity_einsatz), color: c.color_einsatz, show: c.show_einsatz },
       probe: { label: c.label_probe, value: getVal(h, c.entity_probe), color: c.color_probe, show: c.show_probe },
-      geratehaus: { label: c.label_geratehaus, value: getVal(h, c.entity_geratehaus), color: c.color_geratehaus, show: c.show_geratehaus },
+      sonstiges: { label: c.label_sonstiges, value: getVal(h, c.entity_sonstiges), color: c.color_sonstiges, show: c.show_sonstiges },
       gesamt: { label: c.label_gesamt, value: getVal(h, c.entity_gesamt), color: c.color_gesamt, show: c.show_total && c.total_display === "chip" },
     };
     const order = c.category_order || DEFAULTS.category_order;
@@ -659,9 +668,7 @@ class FeuerwehrTimeTrackerCardEditor extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...DEFAULTS, ...config };
-    if (!Array.isArray(this._config.category_order)) {
-      this._config.category_order = [...DEFAULTS.category_order];
-    }
+    this._config.category_order = normalizeCategoryOrder(this._config.category_order);
     if (!this._built) {
       this._buildEditor();
     }
@@ -687,7 +694,7 @@ class FeuerwehrTimeTrackerCardEditor extends HTMLElement {
         if (!grouped[eid]) grouped[eid] = {};
         if (e.unique_id?.endsWith("_einsatz")) grouped[eid].entity_einsatz = e.entity_id;
         if (e.unique_id?.endsWith("_probe")) grouped[eid].entity_probe = e.entity_id;
-        if (e.unique_id?.endsWith("_geratehaus")) grouped[eid].entity_geratehaus = e.entity_id;
+        if (e.unique_id?.endsWith("_sonstiges")) grouped[eid].entity_sonstiges = e.entity_id;
         if (e.unique_id?.endsWith("_gesamt")) grouped[eid].entity_gesamt = e.entity_id;
       }
       this._entries = Object.entries(grouped).map(([id, ents]) => ({ entry_id: id, ...ents }));
@@ -699,7 +706,7 @@ class FeuerwehrTimeTrackerCardEditor extends HTMLElement {
           entry_id: first.entry_id,
           entity_einsatz: first.entity_einsatz,
           entity_probe: first.entity_probe,
-          entity_geratehaus: first.entity_geratehaus,
+          entity_sonstiges: first.entity_sonstiges,
           entity_gesamt: first.entity_gesamt,
         };
         this._fireChanged();
@@ -773,7 +780,9 @@ class FeuerwehrTimeTrackerCardEditor extends HTMLElement {
       const labelKey = `label_${key}`;
       const colorKey = `color_${key}`;
       const entityKey = `entity_${key}`;
-      const title = { einsatz: "Einsatz", probe: "Probe", geratehaus: "Gerätehaus", gesamt: "Gesamt" }[key];
+      const title = { einsatz: "Einsatz", probe: "Probe", sonstiges: "Sonstiges", gesamt: "Gesamt" }[key];
+      // Unknown keys (e.g. legacy "geratehaus" from old stored configs) are skipped
+      if (!title) return;
 
       let extraRows = "";
       if (isGesamt) {
