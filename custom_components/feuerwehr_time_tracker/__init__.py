@@ -135,6 +135,25 @@ def _async_migrate_geratehaus_entity(hass: HomeAssistant, entry: ConfigEntry) ->
         return
 
     new_unique_id = f"{entry.entry_id}_sonstiges"
+
+    # If the target unique_id already exists, the "sonstiges" identity is already
+    # present (e.g. a fresh sensor was created before/alongside this legacy one).
+    # The old geratehaus entity is now an orphan – renaming it would clash on the
+    # unique_id (ValueError) and abort setup. Remove the orphan instead; the
+    # counter values live in the coordinator's Store, not in this entity.
+    existing_sonstiges = registry.async_get_entity_id(
+        "sensor", DOMAIN, new_unique_id
+    )
+    if existing_sonstiges is not None:
+        registry.async_remove(old_entity_id)
+        _LOGGER.warning(
+            "Removed orphaned legacy entity %s – '_sonstiges' identity already "
+            "exists as %s (no data lost, counters live in storage)",
+            old_entity_id,
+            existing_sonstiges,
+        )
+        return
+
     new_entity_id = "sensor.other_hours"
     if registry.async_get(new_entity_id) is not None:
         # entity_id already taken (e.g. second config entry) – keep the old

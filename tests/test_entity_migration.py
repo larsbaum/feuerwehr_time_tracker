@@ -57,6 +57,43 @@ async def test_migration_is_noop_without_legacy_entity(hass: HomeAssistant):
     assert migrated.unique_id == f"{entry.entry_id}_sonstiges"
 
 
+async def test_migration_removes_orphan_when_unique_id_taken(hass: HomeAssistant):
+    """Both identities exist: the legacy orphan is removed, no crash."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+
+    # The new "_sonstiges" identity already exists (e.g. fresh sensor created).
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_sonstiges",
+        suggested_object_id="feuerwehr_zeit_tracker_other_hours",
+        config_entry=entry,
+    )
+    # ...and a leftover legacy "_geratehaus" entity still lingers.
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_geratehaus",
+        suggested_object_id="station_hours",
+        config_entry=entry,
+    )
+
+    # Must not raise (previously crashed with a unique_id ValueError).
+    _async_migrate_geratehaus_entity(hass, entry)
+
+    # The orphan is gone, the sonstiges identity is untouched.
+    assert (
+        registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_geratehaus")
+        is None
+    )
+    sonstiges_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_sonstiges"
+    )
+    assert sonstiges_id is not None
+    assert registry.async_get(sonstiges_id) is not None
+
+
 async def test_migration_keeps_entity_id_when_target_taken(hass: HomeAssistant):
     """Second config entry: sensor.other_hours already exists -> keep old id."""
     registry = er.async_get(hass)

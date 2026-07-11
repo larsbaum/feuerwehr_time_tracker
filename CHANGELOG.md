@@ -14,6 +14,14 @@ sinnvoll für eine HACS-Integration.
 ## [Unreleased]
 
 ### Fixed
+- **Setup-Absturz bei doppelter Kategorie-Identität behoben:** Existierten auf einer
+  Instanz gleichzeitig ein altes `_geratehaus`- **und** bereits ein
+  `_sonstiges`-Entity, brach das Setup mit `ValueError: Unique id '…_sonstiges'
+  is already in use` ab (die Migration prüfte nur die entity_id, nicht die
+  unique_id). Jetzt wird in diesem Fall das verwaiste `_geratehaus`-Entity
+  entfernt (die Zählerstände liegen im Storage, nicht im Entity – kein
+  Datenverlust). Neuer Test dafür.
+
 - **Zwei aufeinanderfolgende Alarme wurden fälschlich zusammengerechnet:**
   Wer während eines Alarms ans Gerätehaus fuhr, **nicht** abrückte und die Zone
   wieder verließ (Timer für die Einsatz-Abwesenheit lief an), endete dieser
