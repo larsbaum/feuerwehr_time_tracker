@@ -44,7 +44,6 @@ Du kannst zwischen drei Modi wählen:
 
 - Statt eines festen Wochentags wird eine **Kalender-Entität** überwacht (z.B. ein Google- oder CalDAV-Kalender).
 - Du gibst **Schlagwörter** ein (kommagetrennt, z.B. `Probe,Übung,Training`). Sobald ein Kalender-Ereignis aktiv ist, dessen Titel eines der Schlagwörter enthält, wird Probe-Tracking aktiviert.
-- Ohne Schlagwörter zählt **jedes** aktive Ereignis.
 - Vorteil: Unregelmäßige oder verschobene Proben werden automatisch erkannt.
 
 #### Beides (Tag & Zeit + Kalender)
@@ -70,9 +69,8 @@ Sonstiges erfasst, wenn der Termin **keine** Übung ist:
   Gerätehaus, wird die Abwesenheit beim Zurückkommen als Sonstiges-Minuten addiert
   – dieselbe Logik wie bei Einsatz/Probe.
 - **Wichtig:** Ein aktiver Kalender-Termin ist zwingende Voraussetzung. Verlässt du
-  die Zone ohne passenden Termin (z. B. zum Einkaufen), wird **nichts** gezählt.
-- Die Dauer wird durch den Regler **„Max. Dauer für Sonstige Termine"** begrenzt (gekappt,
-  nicht verworfen). Anders als bei Proben gibt es hier **keinen** Tagesgrenzen-Schutz
+  die Zone ohne passenden Termin, wird **nichts** gezählt.
+- Die Dauer wird durch den Regler **„Max. Dauer für Sonstige Termine"** begrenzt. Anders als bei Proben gibt es hier **keinen** Tagesgrenzen-Schutz
   – ein Termin darf über Mitternacht laufen.
 - Ist der Schalter aus, bleibt alles wie bisher (nur Übungen werden getrackt).
 
@@ -199,8 +197,7 @@ ___
 > (bzw. Aktionen) auf die iOS-Benachrichtigung → der zuletzt für **diese** Meldung
 > addierte Wert wird wieder abgezogen; die Original-Meldung wird durch eine
 > Bestätigung ersetzt. Bei mehreren offenen Meldungen setzt jede den richtigen Wert
-> zurück. Es gibt keine Ablauffrist – der Button bleibt gültig, bis er benutzt wird
-> (die letzten 50 offenen Undo-Aktionen werden vorgehalten).
+> zurück. Es gibt keine Ablauffrist – der Button bleibt gültig, bis er benutzt wird.
 
 ---
 
@@ -214,16 +211,14 @@ Nach der Einrichtung erstellt die Integration automatisch:
 | `sensor.training_hours` | Gesamt-Probestunden | h |
 | `sensor.other_hours` | Sonstige Stunden | h |
 | `sensor.total_hours` | Gesamtstunden (Summe aller Kategorien) | h |
-| `sensor.einsatze_gesamt` | Anzahl aller Alarme (Diagnose) | – |
-| `sensor.einsatze_abgeruckt` | Anzahl Alarme mit Abrücken (Diagnose) | – |
-| `sensor.einsatze_bereitschaft` | Anzahl Alarme in Bereitschaft am Gerätehaus (Diagnose) | – |
+| `sensor.einsatze_gesamt` | Anzahl aller Alarme | – |
+| `sensor.einsatze_abgeruckt` | Anzahl Alarme mit Abrücken | – |
+| `sensor.einsatze_bereitschaft` | Anzahl Alarme in Bereitschaft am Gerätehaus | – |
 
 Die Stunden-Sensoren haben zusätzlich ein `minutes`-Attribut für präzise Auswertungen,
 die Einsatzzahlen ein `count`-Attribut. Alle Sensoren tragen außerdem ein
 `previous_years`-Attribut mit den archivierten Werten abgeschlossener Jahre (siehe
-[Automatischer Jahreswechsel](#%EF%B8%8F-automatischer-jahreswechsel)). Die drei
-Einsatzzahlen-Sensoren sind **Diagnose-Entities** und liegen auf demselben Gerät im
-Abschnitt „Diagnose".
+[Automatischer Jahreswechsel](#%EF%B8%8F-automatischer-jahreswechsel)).
 
 ---
 
