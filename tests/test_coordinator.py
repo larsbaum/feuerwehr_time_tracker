@@ -712,19 +712,20 @@ async def test_try_undo_subtracts_correct_minutes_for_matching_token(
     coordinator.add_minutes("einsatz", 100)
     coordinator.add_minutes("probe", 50)
     coordinator._data[DATA_PENDING_UNDOS] = {
-        "tok_einsatz": {"category": "einsatz", "minutes": 60, "created": 1.0},
-        "tok_probe": {"category": "probe", "minutes": 30, "created": 2.0},
+        "TOK_EINSATZ": {"category": "einsatz", "minutes": 60, "created": 1.0},
+        "TOK_PROBE": {"category": "probe", "minutes": 30, "created": 2.0},
     }
     await hass.async_block_till_done()
 
+    # Lower-case lookup must still match (iOS uppercases action identifiers).
     assert coordinator.try_undo("tok_einsatz") is True
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 40  # 100 - 60
     assert coordinator.probe_minutes == 50    # untouched
     # Used token gone, the other one still pending.
-    assert "tok_einsatz" not in coordinator._data[DATA_PENDING_UNDOS]
-    assert "tok_probe" in coordinator._data[DATA_PENDING_UNDOS]
+    assert "TOK_EINSATZ" not in coordinator._data[DATA_PENDING_UNDOS]
+    assert "TOK_PROBE" in coordinator._data[DATA_PENDING_UNDOS]
 
 
 async def test_try_undo_unknown_token_is_noop(hass: HomeAssistant, notify_config):
@@ -746,11 +747,11 @@ async def test_try_undo_clamps_at_zero(hass: HomeAssistant, notify_config):
     coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
     coordinator.add_minutes("probe", 20)
     coordinator._data[DATA_PENDING_UNDOS] = {
-        "t": {"category": "probe", "minutes": 60, "created": 1.0}
+        "T": {"category": "probe", "minutes": 60, "created": 1.0}
     }
     await hass.async_block_till_done()
 
-    assert coordinator.try_undo("t") is True
+    assert coordinator.try_undo("T") is True
     await hass.async_block_till_done()
 
     assert coordinator.probe_minutes == 0
@@ -768,11 +769,11 @@ async def test_try_undo_clears_original_and_sends_fresh_confirmation(
     coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
     coordinator.add_minutes("sonstiges", 90)
     coordinator._data[DATA_PENDING_UNDOS] = {
-        "abc": {"category": "sonstiges", "minutes": 30, "created": 1.0}
+        "ABC": {"category": "sonstiges", "minutes": 30, "created": 1.0}
     }
     await hass.async_block_till_done()
 
-    coordinator.try_undo("abc")
+    coordinator.try_undo("ABC")
     await hass.async_block_till_done()
 
     # The original notification is cleared by its tag.
@@ -780,7 +781,7 @@ async def test_try_undo_clears_original_and_sends_fresh_confirmation(
         c for c in calls if c.data.get("message") == "clear_notification"
     ]
     assert any(
-        c.data["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}abc" for c in clear_calls
+        c.data["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}ABC" for c in clear_calls
     )
 
     # The confirmation is a fresh push with its own tag and no undo action.
@@ -789,7 +790,7 @@ async def test_try_undo_clears_original_and_sends_fresh_confirmation(
     ]
     assert len(confirmations) == 1
     payload = confirmations[0].data
-    assert payload["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}done_abc"
+    assert payload["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}done_ABC"
     assert "actions" not in payload["data"]
     assert CATEGORY_LABELS["sonstiges"] in payload["message"]
 

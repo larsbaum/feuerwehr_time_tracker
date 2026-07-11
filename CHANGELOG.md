@@ -47,9 +47,12 @@ sinnvoll für eine HACS-Integration.
     50 gedeckelt (älteste fallen raus) – so bleibt der Speicher konstant klein,
     ohne dass eine Frist konfiguriert werden muss.
   - Cross-Platform: der Listener reagiert auf `mobile_app_notification_action`
-    **und** das ältere iOS-Event `ios.notification_action_fired`. Kein neues
-    Config-Feld nötig – der Button erscheint automatisch, sobald ein Notify-Dienst
-    hinterlegt ist.
+    **und** das ältere iOS-Event `ios.notification_action_fired`. iOS liefert
+    Action-Identifier in Großbuchstaben zurück – Tokens werden daher uppercase
+    erzeugt und case-insensitiv verglichen. Der Listener wird beim Config-Entry-
+    Setup registriert (nicht erst beim HA-Neustart), greift also auch nach einem
+    reinen **Reload** der Integration. Kein neues Config-Feld nötig – der Button
+    erscheint automatisch, sobald ein Notify-Dienst hinterlegt ist.
   - Neue Tests: Undo-Datensatz-Anlage inkl. Action-Button, Zuordnung des richtigen
     Tokens bei mehreren Meldungen, unbekanntes/doppelt getipptes Token (No-op),
     Deckelung auf 50, Bestätigung mit gleichem Tag ohne Button, Ende-zu-Ende.

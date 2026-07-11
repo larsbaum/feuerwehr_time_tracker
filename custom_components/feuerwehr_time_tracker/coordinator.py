@@ -659,7 +659,9 @@ class FeuerwehrCoordinator:
         payload: dict[str, Any] = {"title": title, "message": message}
 
         if category and delta_minutes > 0:
-            token = secrets.token_hex(4)
+            # Uppercase token: iOS returns notification action identifiers in
+            # UPPERCASE, so we store/compare uppercase to make them match.
+            token = secrets.token_hex(4).upper()
             self._data.setdefault(DATA_PENDING_UNDOS, {})[token] = {
                 "category": category,
                 "minutes": int(delta_minutes),
@@ -703,6 +705,10 @@ class FeuerwehrCoordinator:
         were subtracted), False otherwise. Idempotent: a second tap on the same
         notification finds no record and is a no-op.
         """
+        # Normalise case: iOS uppercases action identifiers, so a token coming
+        # back from the app may differ in case from what we (already uppercase)
+        # stored. Compare case-insensitively to be safe.
+        token = str(token).upper()
         record = self._data.get(DATA_PENDING_UNDOS, {}).pop(token, None)
         if record is None:
             return False

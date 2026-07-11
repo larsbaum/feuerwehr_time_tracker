@@ -64,28 +64,43 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     ])
     add_extra_js_url(hass, f"/{DOMAIN}/feuerwehr-time-tracker-card.js?v={CARD_VERSION}")
 
-    # Listen for the companion app's "notification action tapped" event, so a
-    # user can undo an added time straight from the push notification. Registered
-    # once per HA start (like the frontend card). The cross-platform event uses
-    # "action"; the older iOS-only event uses "actionName" – handle both.
+    return True
+
+
+# Key under which the undo-notification listener unsubscribe callbacks are stored
+# (kept OUT of hass.data[DOMAIN], which must stay a pure coordinator map).
+UNDO_LISTENERS_KEY = f"{DOMAIN}_undo_listeners"
+
+
+def _register_undo_listener(hass: HomeAssistant) -> None:
+    """Listen for a tapped notification action and route it to a coordinator.
+
+    Registered on config-entry setup (not just HA start) so it also works after
+    a plain integration reload. The cross-platform companion-app event carries
+    the identifier under "action"; the older iOS-only event uses "actionName".
+    iOS returns identifiers UPPERCASE, so we uppercase before matching.
+    """
+
     @callback
     def _handle_notification_action(event: Event) -> None:
-        action = event.data.get("action") or event.data.get("actionName")
-        if not action or not action.startswith(UNDO_ACTION_PREFIX):
+        raw = event.data.get("action") or event.data.get("actionName") or ""
+        action = raw.upper()
+        if not action.startswith(UNDO_ACTION_PREFIX):
             return
         token = action[len(UNDO_ACTION_PREFIX):]
         for coordinator in list(hass.data.get(DOMAIN, {}).values()):
             if coordinator.try_undo(token):
-                break
+                return
+        _LOGGER.info("Undo action received but no pending record for token %s", token)
 
-    hass.bus.async_listen(
-        EVENT_MOBILE_APP_NOTIFICATION_ACTION, _handle_notification_action
-    )
-    hass.bus.async_listen(
-        EVENT_IOS_NOTIFICATION_ACTION, _handle_notification_action
-    )
-
-    return True
+    hass.data[UNDO_LISTENERS_KEY] = [
+        hass.bus.async_listen(
+            EVENT_MOBILE_APP_NOTIFICATION_ACTION, _handle_notification_action
+        ),
+        hass.bus.async_listen(
+            EVENT_IOS_NOTIFICATION_ACTION, _handle_notification_action
+        ),
+    ]
 
 
 @callback
@@ -153,6 +168,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.services.has_service(DOMAIN, SERVICE_RESET):
         _register_services(hass)
 
+    # Register the undo-notification event listener (only once). Done here rather
+    # than in async_setup so it is also (re-)registered after a plain reload.
+    if UNDO_LISTENERS_KEY not in hass.data:
+        _register_undo_listener(hass)
+
     _LOGGER.info("Feuerwehr Zeit-Tracker setup complete for entry %s", entry.entry_id)
     return True
 
@@ -165,10 +185,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Remove services if no more coordinator entries remain
+    # Remove services and the undo listener if no more coordinator entries remain
     if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, SERVICE_RESET)
         hass.services.async_remove(DOMAIN, SERVICE_ADD_MINUTES)
+        for unsub in hass.data.pop(UNDO_LISTENERS_KEY, []):
+            unsub()
 
     return unload_ok
 
