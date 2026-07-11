@@ -84,14 +84,25 @@ def _register_undo_listener(hass: HomeAssistant) -> None:
     @callback
     def _handle_notification_action(event: Event) -> None:
         raw = event.data.get("action") or event.data.get("actionName") or ""
+        # Debug: every notification-action event we receive (enable via
+        # logger: custom_components.feuerwehr_time_tracker: debug).
+        _LOGGER.debug(
+            "Notification action event '%s' received: %s", event.event_type, event.data
+        )
         action = raw.upper()
         if not action.startswith(UNDO_ACTION_PREFIX):
             return
         token = action[len(UNDO_ACTION_PREFIX):]
         for coordinator in list(hass.data.get(DOMAIN, {}).values()):
             if coordinator.try_undo(token):
+                _LOGGER.info("Undo applied for token %s", token)
                 return
-        _LOGGER.info("Undo action received but no pending record for token %s", token)
+        # WARNING so it shows up in Settings → System → Logs without enabling debug.
+        _LOGGER.warning(
+            "Undo action '%s' received but no pending record matched (token %s)",
+            raw,
+            token,
+        )
 
     hass.data[UNDO_LISTENERS_KEY] = [
         hass.bus.async_listen(
