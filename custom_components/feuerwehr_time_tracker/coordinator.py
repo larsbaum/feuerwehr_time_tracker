@@ -103,6 +103,7 @@ class FeuerwehrCoordinator:
 
         self._unsub_zone = None
         self._unsub_timer = None
+        self._unsub_alarm = None
         self._listeners: list[callback] = []
         self._rollover_in_progress = False
 
@@ -275,6 +276,16 @@ class FeuerwehrCoordinator:
         self._unsub_timer = async_track_time_interval(
             self.hass, self._handle_minute_tick, timedelta(minutes=1)
         )
+
+        # Listen for the alarm sensor leaving the "on" state. This lets us
+        # discard a pending einsatz_started as soon as the triggering alarm
+        # ends – so a later, unrelated alarm can't retroactively count the gap
+        # in between as Einsatz (see _handle_alarm_state_change).
+        alarm = self.get_cfg(CONF_ALARM)
+        if alarm:
+            self._unsub_alarm = async_track_state_change_event(
+                self.hass, [alarm], self._handle_alarm_state_change
+            )
         _LOGGER.info("Feuerwehr Zeit-Tracker coordinator started for %s", person)
 
     async def async_shutdown(self) -> None:
@@ -283,6 +294,8 @@ class FeuerwehrCoordinator:
             self._unsub_zone()
         if self._unsub_timer:
             self._unsub_timer()
+        if self._unsub_alarm:
+            self._unsub_alarm()
         await self._store.async_save(self._data)
         _LOGGER.info("Feuerwehr Zeit-Tracker coordinator stopped.")
 
@@ -313,6 +326,33 @@ class FeuerwehrCoordinator:
         # --- ENTERING zone ---
         if not old_in_zone and new_in_zone:
             self._on_zone_enter(now)
+
+    @callback
+    def _handle_alarm_state_change(self, event: Event) -> None:
+        """Discard a pending einsatz_started once the alarm leaves 'on'.
+
+        Scenario this guards against: a member drives to the station during an
+        alarm and leaves the zone again without departing (einsatz_started is
+        set). That alarm ends, and hours later a *different* alarm arrives for
+        which the member returns to the station. Without this handler the
+        stale einsatz_started would survive and _on_zone_enter would count the
+        whole gap in between (~3h in the reported case) as Einsatz.
+
+        Any state other than 'on' (including 'off'/'unavailable'/'unknown')
+        counts as "the alarm was off in between", mirroring the alarm_on
+        definition used elsewhere. A genuine mission keeps the alarm 'on'
+        throughout, so this handler never fires for it.
+        """
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state == "on":
+            return
+        if self._data.get(DATA_EINSATZ_STARTED) is not None:
+            _LOGGER.info(
+                "Alarm no longer active (%s) – discarding pending einsatz_started",
+                new_state.state,
+            )
+            self._data[DATA_EINSATZ_STARTED] = None
+            self.hass.async_create_task(self._async_save())
 
     def _on_zone_leave(self, now: datetime, alarm_entity: str) -> None:
         """Handle zone leave: set start timestamps if conditions match."""

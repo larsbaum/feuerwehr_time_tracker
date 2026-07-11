@@ -13,6 +13,24 @@ sinnvoll für eine HACS-Integration.
 
 ## [Unreleased]
 
+### Fixed
+- **Zwei aufeinanderfolgende Alarme wurden fälschlich zusammengerechnet:**
+  Wer während eines Alarms ans Gerätehaus fuhr, **nicht** abrückte und die Zone
+  wieder verließ (Timer für die Einsatz-Abwesenheit lief an), endete dieser
+  Alarm, und kam Stunden später ein **anderer** Alarm, zu dem man erneut ans
+  Gerätehaus fuhr — dann wurde die komplette Zwischenzeit (im Beispiel ~3 h,
+  daheim verbracht) beim Zurückkehren als Einsatz gutgeschrieben. Ursache: beim
+  Betreten der Zone wurde nur geprüft, ob der Alarm *gerade* aktiv ist, nicht ob
+  es **derselbe** Alarm wie beim Verlassen war.
+  - **Lösung:** Der Alarm-Sensor wird jetzt zusätzlich auf Zustandswechsel
+    überwacht. Verlässt der Alarm den `on`-Zustand (er war zwischenzeitlich also
+    aus), wird ein wartender Einsatz-Start sofort verworfen — ein späterer,
+    anderer Alarm kann die Lücke damit nicht mehr fälschlich als Einsatz zählen.
+    Ein echter Einsatz mit Abrücken (Alarm bleibt durchgehend aktiv) wird
+    unverändert korrekt gezählt.
+  - Neue Tests: Verwerfen bei Alarm-Aus zwischen zwei Alarmen, Regression für den
+    durchgehenden Einsatz, No-op ohne wartenden Einsatz.
+
 ### Added
 - **Sonstige Kalender-Termine als Abwesenheit tracken:** Neuer Toggle
   „Alle weiteren Kalendereinträge als ‚Sonstige' Zeit erkennen" (nur in den Modi

@@ -3,7 +3,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, State
 from homeassistant.helpers.storage import Store
 
 from custom_components.feuerwehr_time_tracker.const import (
@@ -19,6 +19,7 @@ from custom_components.feuerwehr_time_tracker.const import (
     CONF_ZONE,
     DATA_CURRENT_YEAR,
     DATA_EINSATZ_MINUTES,
+    DATA_EINSATZ_STARTED,
     DATA_PREVIOUS_YEARS,
     DATA_PROBE_MINUTES,
     DATA_PROBE_STARTED,
@@ -560,3 +561,76 @@ async def test_probe_absence_capped_at_max(hass: HomeAssistant, base_config):
     await hass.async_block_till_done()
 
     assert coordinator.probe_minutes == 120
+
+
+def _alarm_off_event(config: dict) -> Event:
+    """Build a state_changed event for the alarm going on -> off."""
+    alarm = config[CONF_ALARM]
+    return Event(
+        "state_changed",
+        {
+            "entity_id": alarm,
+            "old_state": State(alarm, "on"),
+            "new_state": State(alarm, "off"),
+        },
+    )
+
+
+async def test_einsatz_discarded_when_alarm_off_between_alarms(
+    hass: HomeAssistant, base_config
+):
+    """Two separate alarms must not merge: the gap in between is not Einsatz.
+
+    Reproduces the reported bug – member leaves the station during alarm #1
+    without departing, goes home, alarm #1 ends, and hours later alarm #2
+    arrives and the member drives back. The ~3h gap must NOT be counted.
+    """
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+
+    # Alarm #1 active, member leaves the zone -> einsatz_started is set.
+    hass.states.async_set(base_config[CONF_ALARM], "on")
+    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_EINSATZ_STARTED] is not None
+
+    # Alarm #1 ends -> the pending einsatz_started must be discarded.
+    coordinator._handle_alarm_state_change(_alarm_off_event(base_config))
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_EINSATZ_STARTED] is None
+
+    # Alarm #2 (~3h later), member returns to the station.
+    hass.states.async_set(base_config[CONF_ALARM], "on")
+    coordinator._on_zone_enter(datetime(2026, 7, 7, 20, 0))
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 0
+
+
+async def test_einsatz_counted_when_alarm_stays_on(hass: HomeAssistant, base_config):
+    """Regression: a genuine mission (alarm stays on) still counts normally."""
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+
+    # Alarm active, member departs (leaves zone) and returns 2h later while the
+    # alarm is still on – no alarm-off event in between.
+    hass.states.async_set(base_config[CONF_ALARM], "on")
+    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
+    await hass.async_block_till_done()
+
+    coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 120
+
+
+async def test_alarm_off_event_ignored_without_pending_einsatz(
+    hass: HomeAssistant, base_config
+):
+    """An alarm-off event without a pending einsatz_started is a no-op."""
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+    assert coordinator._data[DATA_EINSATZ_STARTED] is None
+
+    coordinator._handle_alarm_state_change(_alarm_off_event(base_config))
+    await hass.async_block_till_done()
+
+    assert coordinator._data[DATA_EINSATZ_STARTED] is None
+    assert coordinator.einsatz_minutes == 0
