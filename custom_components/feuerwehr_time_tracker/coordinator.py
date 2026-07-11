@@ -81,6 +81,18 @@ def _is_probe_weekday(now: datetime, weekday_key: str) -> bool:
     return now.weekday() == target
 
 
+def _format_duration(minutes: int) -> str:
+    """Human-readable duration for notifications.
+
+    Values below one hour are shown in minutes (so 1–2 minutes never render as
+    "0.0h"); an hour or more is shown as "X.Xh".
+    """
+    minutes = int(round(minutes))
+    if minutes < 60:
+        return f"{minutes} min"
+    return f"{minutes / 60:.1f}h"
+
+
 class FeuerwehrCoordinator:
     """
     Central coordinator that:
@@ -405,7 +417,7 @@ class FeuerwehrCoordinator:
                     _LOGGER.info("Einsatz: added %d min (total: %d min)", delta, self._data[DATA_EINSATZ_MINUTES])
                     self._maybe_notify(
                         "🚒 Einsatz beendet",
-                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_EINSATZ_MINUTES] / 60:.1f}h",
+                        f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_EINSATZ_MINUTES])}",
                         category="einsatz",
                         delta_minutes=delta,
                     )
@@ -432,7 +444,7 @@ class FeuerwehrCoordinator:
                     _LOGGER.info("Probe absence: added %d min (total: %d min)", delta, self._data[DATA_PROBE_MINUTES])
                     self._maybe_notify(
                         "🧑‍🚒 Probe beendet",
-                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_PROBE_MINUTES] / 60:.1f}h",
+                        f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_PROBE_MINUTES])}",
                         category="probe",
                         delta_minutes=delta,
                     )
@@ -454,7 +466,7 @@ class FeuerwehrCoordinator:
                 _LOGGER.info("Sonstiges appointment: added %d min (total: %d min)", delta, self._data[DATA_SONSTIGES_MINUTES])
                 self._maybe_notify(
                     "🧰 Termin beendet",
-                    f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_SONSTIGES_MINUTES] / 60:.1f}h",
+                    f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_SONSTIGES_MINUTES])}",
                     category="sonstiges",
                     delta_minutes=delta,
                 )
@@ -659,7 +671,7 @@ class FeuerwehrCoordinator:
                 "actions": [
                     {
                         "action": f"{UNDO_ACTION_PREFIX}{token}",
-                        "title": f"{delta_minutes / 60:.1f}h zurücksetzen",
+                        "title": f"{_format_duration(delta_minutes)} zurücksetzen",
                         "destructive": True,
                     }
                 ],
@@ -703,12 +715,16 @@ class FeuerwehrCoordinator:
 
         new_total = int(self._data.get(f"{category}_minutes", 0))
         label = CATEGORY_LABELS.get(category, category)
-        # Reuse the original notification's tag so this confirmation REPLACES the
-        # original push in place (removes the undo button, shows the result).
+        # Tapping the action already dismisses the original notification on iOS,
+        # so we do NOT reuse its tag (a fresh push with a just-dismissed tag may
+        # not surface). Instead: explicitly clear the original (harmless no-op on
+        # iOS, cleans it up on Android where it lingers) and send the confirmation
+        # under its OWN tag so it always shows.
+        self._clear_notification(f"{NOTIFY_TAG_PREFIX}{token}")
         self._notify_raw(
             "↩️ Zurückgesetzt",
-            f"{label}: {minutes / 60:.1f}h zurückgesetzt – neuer Stand: {new_total / 60:.1f}h",
-            tag=f"{NOTIFY_TAG_PREFIX}{token}",
+            f"{label}: {_format_duration(minutes)} zurückgesetzt – neuer Stand: {_format_duration(new_total)}",
+            tag=f"{NOTIFY_TAG_PREFIX}done_{token}",
         )
         _LOGGER.info("Undo %s: removed %d min via token %s", category, minutes, token)
         return True
@@ -726,6 +742,19 @@ class FeuerwehrCoordinator:
                 "notify",
                 notify_service.replace("notify.", ""),
                 payload,
+            )
+        )
+
+    def _clear_notification(self, tag: str) -> None:
+        """Remove a previously sent notification by its tag (companion app)."""
+        notify_service = self.get_cfg(CONF_NOTIFY_SERVICE, "")
+        if not notify_service:
+            return
+        self.hass.async_create_task(
+            self.hass.services.async_call(
+                "notify",
+                notify_service.replace("notify.", ""),
+                {"message": "clear_notification", "data": {"tag": tag}},
             )
         )
 

@@ -39,8 +39,10 @@ sinnvoll für eine HACS-Integration.
   **zuletzt für genau diese Meldung** addierte Zeit wieder abziehen – praktisch,
   wenn eine Erfassung ein Fehler war. Jede Benachrichtigung trägt ein eindeutiges
   Token, sodass bei mehreren offenen Meldungen jede den **richtigen** Wert
-  zurücksetzt. Nach dem Antippen wird die Original-Meldung durch eine Bestätigung
-  ersetzt („Einsatz: X.Xh zurückgesetzt – neuer Stand: …").
+  zurücksetzt. Nach dem Antippen wird die Original-Meldung entfernt und eine
+  frische Bestätigung gesendet („Einsatz: … zurückgesetzt – neuer Stand: …").
+  Zeitangaben unter einer Stunde werden in Minuten angezeigt (statt „0.0h"); der
+  zurückgesetzte Wert rechnet stets mit den exakten Minuten.
   - **Kein Ablauf-Fenster**, aber die offenen Undo-Datensätze sind auf die letzten
     50 gedeckelt (älteste fallen raus) – so bleibt der Speicher konstant klein,
     ohne dass eine Frist konfiguriert werden muss.

@@ -756,10 +756,14 @@ async def test_try_undo_clamps_at_zero(hass: HomeAssistant, notify_config):
     assert coordinator.probe_minutes == 0
 
 
-async def test_try_undo_sends_confirmation_with_tag_and_no_action(
+async def test_try_undo_clears_original_and_sends_fresh_confirmation(
     hass: HomeAssistant, notify_config
 ):
-    """The confirmation reuses the tag (replaces original) and has no undo button."""
+    """Undo clears the original notification and sends a fresh confirmation.
+
+    The confirmation uses its OWN tag (not the original's, which iOS already
+    dismissed on tap) and carries no undo button.
+    """
     calls = _register_notify(hass)
     coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
     coordinator.add_minutes("sonstiges", 90)
@@ -771,8 +775,21 @@ async def test_try_undo_sends_confirmation_with_tag_and_no_action(
     coordinator.try_undo("abc")
     await hass.async_block_till_done()
 
-    payload = calls[-1].data
-    assert payload["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}abc"
+    # The original notification is cleared by its tag.
+    clear_calls = [
+        c for c in calls if c.data.get("message") == "clear_notification"
+    ]
+    assert any(
+        c.data["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}abc" for c in clear_calls
+    )
+
+    # The confirmation is a fresh push with its own tag and no undo action.
+    confirmations = [
+        c for c in calls if c.data.get("title") == "↩️ Zurückgesetzt"
+    ]
+    assert len(confirmations) == 1
+    payload = confirmations[0].data
+    assert payload["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}done_abc"
     assert "actions" not in payload["data"]
     assert CATEGORY_LABELS["sonstiges"] in payload["message"]
 
@@ -818,3 +835,28 @@ async def test_einsatz_notification_undo_end_to_end(
 
     assert coordinator.einsatz_minutes == 0
     assert coordinator._data[DATA_PENDING_UNDOS] == {}
+
+
+async def test_small_duration_undo_uses_actual_minutes_not_rounded_hours(
+    hass: HomeAssistant, notify_config
+):
+    """A 2-minute addition shows '2 min' and undoes the real 2 minutes (not 0.0h)."""
+    calls = _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_minutes("einsatz", 2)
+
+    coordinator._maybe_notify(
+        "🚒 Einsatz beendet", "kurz", category="einsatz", delta_minutes=2
+    )
+    await hass.async_block_till_done()
+
+    # Button reads minutes, not "0.0h"; the record keeps the exact minutes.
+    token, record = next(iter(coordinator._data[DATA_PENDING_UNDOS].items()))
+    assert record["minutes"] == 2
+    assert calls[-1].data["data"]["actions"][0]["title"] == "2 min zurücksetzen"
+
+    assert coordinator.try_undo(token) is True
+    await hass.async_block_till_done()
+
+    # The real 2 minutes were subtracted, not a rounded 0.
+    assert coordinator.einsatz_minutes == 0
