@@ -47,6 +47,28 @@ DATA_PROBE_STARTED = "probe_started"       # timestamp float or None
 DATA_SONSTIGES_STARTED = "sonstiges_started"  # timestamp float or None
 DATA_CURRENT_YEAR = "current_year"         # int or None (year the counters belong to)
 DATA_PREVIOUS_YEARS = "previous_years"     # dict[str, dict[str, int]] archived totals
+DATA_PENDING_UNDOS = "pending_undos"       # dict[token, {category, minutes, created}]
+
+# Undo-via-notification: keep at most this many pending undo records. There is no
+# time-based expiry; instead the oldest records are pruned once the cap is hit, so
+# storage stays bounded without needing a config option.
+MAX_PENDING_UNDOS = 50
+
+# Actionable-notification wiring
+UNDO_ACTION_PREFIX = "FWTT_UNDO_"          # notification action identifier prefix
+NOTIFY_TAG_PREFIX = "fwtt_"                # notification tag prefix (per token)
+# Event fired back by the HA companion app when a notification action is tapped.
+# The cross-platform event carries the identifier under "action"; the older
+# iOS-only event uses "actionName" – we listen to both for robustness.
+EVENT_MOBILE_APP_NOTIFICATION_ACTION = "mobile_app_notification_action"
+EVENT_IOS_NOTIFICATION_ACTION = "ios.notification_action_fired"
+
+# Human-readable category labels for the undo confirmation message.
+CATEGORY_LABELS = {
+    "einsatz": "Einsatz",
+    "probe": "Probe",
+    "sonstiges": "Sonstiges",
+}
 
 # Legacy keys (pre-rename "geratehaus" -> "sonstiges"), only used for migration
 LEGACY_DATA_GERATEHAUS_MINUTES = "geratehaus_minutes"

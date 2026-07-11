@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from datetime import datetime, timedelta, time as dtime
 from typing import Any
 
@@ -42,6 +43,11 @@ from .const import (
     DATA_SONSTIGES_STARTED,
     DATA_CURRENT_YEAR,
     DATA_PREVIOUS_YEARS,
+    DATA_PENDING_UNDOS,
+    MAX_PENDING_UNDOS,
+    UNDO_ACTION_PREFIX,
+    NOTIFY_TAG_PREFIX,
+    CATEGORY_LABELS,
     LEGACY_DATA_GERATEHAUS_MINUTES,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
@@ -99,6 +105,7 @@ class FeuerwehrCoordinator:
             DATA_SONSTIGES_STARTED: None,
             DATA_CURRENT_YEAR: None,
             DATA_PREVIOUS_YEARS: {},
+            DATA_PENDING_UNDOS: {},
         }
 
         self._unsub_zone = None
@@ -398,7 +405,9 @@ class FeuerwehrCoordinator:
                     _LOGGER.info("Einsatz: added %d min (total: %d min)", delta, self._data[DATA_EINSATZ_MINUTES])
                     self._maybe_notify(
                         "🚒 Einsatz beendet",
-                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_EINSATZ_MINUTES] / 60:.1f}h"
+                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_EINSATZ_MINUTES] / 60:.1f}h",
+                        category="einsatz",
+                        delta_minutes=delta,
                     )
             else:
                 _LOGGER.info("Einsatz: alarm no longer active, discarding %d sec absence",
@@ -423,7 +432,9 @@ class FeuerwehrCoordinator:
                     _LOGGER.info("Probe absence: added %d min (total: %d min)", delta, self._data[DATA_PROBE_MINUTES])
                     self._maybe_notify(
                         "🧑‍🚒 Probe beendet",
-                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_PROBE_MINUTES] / 60:.1f}h"
+                        f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_PROBE_MINUTES] / 60:.1f}h",
+                        category="probe",
+                        delta_minutes=delta,
                     )
             self._data[DATA_PROBE_STARTED] = None
 
@@ -443,7 +454,9 @@ class FeuerwehrCoordinator:
                 _LOGGER.info("Sonstiges appointment: added %d min (total: %d min)", delta, self._data[DATA_SONSTIGES_MINUTES])
                 self._maybe_notify(
                     "🧰 Termin beendet",
-                    f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_SONSTIGES_MINUTES] / 60:.1f}h"
+                    f"{delta / 60:.1f}h addiert – Gesamt: {self._data[DATA_SONSTIGES_MINUTES] / 60:.1f}h",
+                    category="sonstiges",
+                    delta_minutes=delta,
                 )
             self._data[DATA_SONSTIGES_STARTED] = None
 
@@ -613,15 +626,106 @@ class FeuerwehrCoordinator:
     # Notifications
     # ------------------------------------------------------------------
 
-    def _maybe_notify(self, title: str, message: str) -> None:
+    def _maybe_notify(
+        self,
+        title: str,
+        message: str,
+        category: str | None = None,
+        delta_minutes: int = 0,
+    ) -> None:
+        """Send a push notification, optionally with an "undo" action button.
+
+        When ``category`` and a positive ``delta_minutes`` are given, a unique
+        undo token is registered and an actionable-notification button
+        ("X.Xh zurücksetzen") is attached. Tapping it later fires an event that
+        routes back to :meth:`try_undo` (see __init__._handle_notification_action).
+        """
         notify_service = self.get_cfg(CONF_NOTIFY_SERVICE, "")
         if not notify_service:
             return
+
+        payload: dict[str, Any] = {"title": title, "message": message}
+
+        if category and delta_minutes > 0:
+            token = secrets.token_hex(4)
+            self._data.setdefault(DATA_PENDING_UNDOS, {})[token] = {
+                "category": category,
+                "minutes": int(delta_minutes),
+                "created": dt_util.now().timestamp(),
+            }
+            self._prune_pending_undos()
+            payload["data"] = {
+                "tag": f"{NOTIFY_TAG_PREFIX}{token}",
+                "actions": [
+                    {
+                        "action": f"{UNDO_ACTION_PREFIX}{token}",
+                        "title": f"{delta_minutes / 60:.1f}h zurücksetzen",
+                        "destructive": True,
+                    }
+                ],
+            }
+            self.hass.async_create_task(self._async_save())
+
         self.hass.async_create_task(
             self.hass.services.async_call(
                 "notify",
                 notify_service.replace("notify.", ""),
-                {"title": title, "message": message},
+                payload,
+            )
+        )
+
+    def _prune_pending_undos(self) -> None:
+        """Keep only the newest MAX_PENDING_UNDOS records (no time expiry)."""
+        undos = self._data.get(DATA_PENDING_UNDOS, {})
+        if len(undos) <= MAX_PENDING_UNDOS:
+            return
+        # Drop the oldest records first (smallest "created" timestamp).
+        ordered = sorted(undos.items(), key=lambda kv: kv[1].get("created", 0))
+        for token, _rec in ordered[: len(undos) - MAX_PENDING_UNDOS]:
+            undos.pop(token, None)
+
+    def try_undo(self, token: str) -> bool:
+        """Undo a previously notified time addition, identified by ``token``.
+
+        Returns True if the token matched a pending undo record (and the minutes
+        were subtracted), False otherwise. Idempotent: a second tap on the same
+        notification finds no record and is a no-op.
+        """
+        record = self._data.get(DATA_PENDING_UNDOS, {}).pop(token, None)
+        if record is None:
+            return False
+
+        category = record["category"]
+        minutes = int(record["minutes"])
+        # add_minutes clamps at 0, notifies sensors and saves _data (which no
+        # longer contains the popped token).
+        self.add_minutes(category, -minutes)
+
+        new_total = int(self._data.get(f"{category}_minutes", 0))
+        label = CATEGORY_LABELS.get(category, category)
+        # Reuse the original notification's tag so this confirmation REPLACES the
+        # original push in place (removes the undo button, shows the result).
+        self._notify_raw(
+            "↩️ Zurückgesetzt",
+            f"{label}: {minutes / 60:.1f}h zurückgesetzt – neuer Stand: {new_total / 60:.1f}h",
+            tag=f"{NOTIFY_TAG_PREFIX}{token}",
+        )
+        _LOGGER.info("Undo %s: removed %d min via token %s", category, minutes, token)
+        return True
+
+    def _notify_raw(self, title: str, message: str, tag: str | None = None) -> None:
+        """Send a plain push notification (no undo action)."""
+        notify_service = self.get_cfg(CONF_NOTIFY_SERVICE, "")
+        if not notify_service:
+            return
+        payload: dict[str, Any] = {"title": title, "message": message}
+        if tag:
+            payload["data"] = {"tag": tag}
+        self.hass.async_create_task(
+            self.hass.services.async_call(
+                "notify",
+                notify_service.replace("notify.", ""),
+                payload,
             )
         )
 

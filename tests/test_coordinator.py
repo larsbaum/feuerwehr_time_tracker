@@ -3,12 +3,13 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
-from homeassistant.core import Event, HomeAssistant, State
+from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers.storage import Store
 
 from custom_components.feuerwehr_time_tracker.const import (
     CONF_ALARM,
     CONF_EINSATZ_MAX_HOURS,
+    CONF_NOTIFY_SERVICE,
     CONF_PERSON,
     CONF_PROBE_CALENDAR,
     CONF_PROBE_KEYWORDS,
@@ -17,18 +18,23 @@ from custom_components.feuerwehr_time_tracker.const import (
     CONF_SONSTIGES_MAX_HOURS,
     CONF_TRACK_OTHER_ABSENCE,
     CONF_ZONE,
+    CATEGORY_LABELS,
     DATA_CURRENT_YEAR,
     DATA_EINSATZ_MINUTES,
     DATA_EINSATZ_STARTED,
+    DATA_PENDING_UNDOS,
     DATA_PREVIOUS_YEARS,
     DATA_PROBE_MINUTES,
     DATA_PROBE_STARTED,
     DATA_SONSTIGES_MINUTES,
     DATA_SONSTIGES_STARTED,
+    MAX_PENDING_UNDOS,
+    NOTIFY_TAG_PREFIX,
     PROBE_MODE_CALENDAR,
     PROBE_MODE_DAY_TIME,
     STORAGE_KEY,
     STORAGE_VERSION,
+    UNDO_ACTION_PREFIX,
 )
 from custom_components.feuerwehr_time_tracker.coordinator import FeuerwehrCoordinator
 
@@ -634,3 +640,181 @@ async def test_alarm_off_event_ignored_without_pending_einsatz(
 
     assert coordinator._data[DATA_EINSATZ_STARTED] is None
     assert coordinator.einsatz_minutes == 0
+
+
+# ----------------------------------------------------------------------
+# Undo via actionable notification
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def notify_config(base_config) -> dict:
+    return {**base_config, CONF_NOTIFY_SERVICE: "notify.mobile_app_test"}
+
+
+def _register_notify(hass: HomeAssistant) -> list:
+    """Register a fake notify.mobile_app_test service, collecting its calls."""
+    calls: list = []
+
+    @callback
+    def _record(call) -> None:
+        calls.append(call)
+
+    hass.services.async_register("notify", "mobile_app_test", _record)
+    return calls
+
+
+async def test_notify_with_undo_registers_record_and_action(
+    hass: HomeAssistant, notify_config
+):
+    """A notification with an undo attaches a button and stores a pending record."""
+    calls = _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+
+    coordinator._maybe_notify(
+        "🚒 Einsatz beendet", "2.5h addiert", category="einsatz", delta_minutes=150
+    )
+    await hass.async_block_till_done()
+
+    # Exactly one pending undo record, matching the notified addition.
+    undos = coordinator._data[DATA_PENDING_UNDOS]
+    assert len(undos) == 1
+    token, record = next(iter(undos.items()))
+    assert record["category"] == "einsatz"
+    assert record["minutes"] == 150
+
+    # The notification payload carries the undo action + a per-token tag.
+    payload = calls[-1].data
+    action = payload["data"]["actions"][0]
+    assert action["action"] == f"{UNDO_ACTION_PREFIX}{token}"
+    assert action["title"] == "2.5h zurücksetzen"
+    assert payload["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}{token}"
+
+
+async def test_maybe_notify_without_service_stores_no_undo(
+    hass: HomeAssistant, base_config
+):
+    """No notify service configured → no notification and no pending undo."""
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
+
+    coordinator._maybe_notify("t", "m", category="einsatz", delta_minutes=60)
+    await hass.async_block_till_done()
+
+    assert coordinator._data[DATA_PENDING_UNDOS] == {}
+
+
+async def test_try_undo_subtracts_correct_minutes_for_matching_token(
+    hass: HomeAssistant, notify_config
+):
+    """With multiple pending undos, only the tapped token's value is reset."""
+    _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_minutes("einsatz", 100)
+    coordinator.add_minutes("probe", 50)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        "tok_einsatz": {"category": "einsatz", "minutes": 60, "created": 1.0},
+        "tok_probe": {"category": "probe", "minutes": 30, "created": 2.0},
+    }
+    await hass.async_block_till_done()
+
+    assert coordinator.try_undo("tok_einsatz") is True
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 40  # 100 - 60
+    assert coordinator.probe_minutes == 50    # untouched
+    # Used token gone, the other one still pending.
+    assert "tok_einsatz" not in coordinator._data[DATA_PENDING_UNDOS]
+    assert "tok_probe" in coordinator._data[DATA_PENDING_UNDOS]
+
+
+async def test_try_undo_unknown_token_is_noop(hass: HomeAssistant, notify_config):
+    """An unknown/already-used token returns False and changes nothing."""
+    _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_minutes("einsatz", 100)
+    await hass.async_block_till_done()
+
+    assert coordinator.try_undo("does_not_exist") is False
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 100
+
+
+async def test_try_undo_clamps_at_zero(hass: HomeAssistant, notify_config):
+    """Undoing more than the current total clamps the counter at 0."""
+    _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_minutes("probe", 20)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        "t": {"category": "probe", "minutes": 60, "created": 1.0}
+    }
+    await hass.async_block_till_done()
+
+    assert coordinator.try_undo("t") is True
+    await hass.async_block_till_done()
+
+    assert coordinator.probe_minutes == 0
+
+
+async def test_try_undo_sends_confirmation_with_tag_and_no_action(
+    hass: HomeAssistant, notify_config
+):
+    """The confirmation reuses the tag (replaces original) and has no undo button."""
+    calls = _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_minutes("sonstiges", 90)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        "abc": {"category": "sonstiges", "minutes": 30, "created": 1.0}
+    }
+    await hass.async_block_till_done()
+
+    coordinator.try_undo("abc")
+    await hass.async_block_till_done()
+
+    payload = calls[-1].data
+    assert payload["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}abc"
+    assert "actions" not in payload["data"]
+    assert CATEGORY_LABELS["sonstiges"] in payload["message"]
+
+
+async def test_prune_pending_undos_caps_at_max(hass: HomeAssistant, notify_config):
+    """Beyond the cap, the oldest records (smallest 'created') are dropped."""
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        f"t{i}": {"category": "einsatz", "minutes": 1, "created": float(i)}
+        for i in range(MAX_PENDING_UNDOS + 5)
+    }
+
+    coordinator._prune_pending_undos()
+
+    undos = coordinator._data[DATA_PENDING_UNDOS]
+    assert len(undos) == MAX_PENDING_UNDOS
+    # The 5 oldest (created 0..4) were removed, the newest survive.
+    assert "t0" not in undos
+    assert "t4" not in undos
+    assert f"t{MAX_PENDING_UNDOS + 4}" in undos
+
+
+async def test_einsatz_notification_undo_end_to_end(
+    hass: HomeAssistant, notify_config
+):
+    """Full path: an einsatz addition can be fully undone via its token."""
+    _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+
+    hass.states.async_set(notify_config[CONF_ALARM], "on")
+    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), notify_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))  # 2h absence
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 120
+    undos = coordinator._data[DATA_PENDING_UNDOS]
+    assert len(undos) == 1
+    token = next(iter(undos))
+
+    assert coordinator.try_undo(token) is True
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_minutes == 0
+    assert coordinator._data[DATA_PENDING_UNDOS] == {}

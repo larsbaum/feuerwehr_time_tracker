@@ -94,7 +94,8 @@ ___
 - Keine manuellen Automationen nötig
 - Vollständig über die HA-Oberfläche konfigurierbar
 - Flexible Probe-Erkennung: fester Wochentag, Kalender oder beides
-- Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende
+- Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende – inkl.
+  „X.Xh zurücksetzen"-Button direkt in der iOS-Benachrichtigung
 - Services zum Zurücksetzen oder manuellen Korrigieren
 
 ### ❗️ Voraussetzungen
@@ -159,6 +160,15 @@ ___
 | Max. Einsatzdauer | Zeitfenster für gültige Rückkehr (Stunden) | `10` |
 | Max. Probedauer | Obergrenze der Abwesenheit während einer Probe (Stunden) | `6` |
 | Notify Service | z.B. `notify.mobile_app_iphone` (leer = keine Benachrichtigung) | – |
+
+> 💡 **Zeit direkt aus der Benachrichtigung zurücksetzen:** Ist ein
+> `notify.mobile_app_*`-Dienst hinterlegt, enthält jede Meldung nach einem
+> Einsatz/einer Probe/einem Termin einen Button **„X.Xh zurücksetzen"**. Long-Press
+> (bzw. Aktionen) auf die iOS-Benachrichtigung → der zuletzt für **diese** Meldung
+> addierte Wert wird wieder abgezogen; die Original-Meldung wird durch eine
+> Bestätigung ersetzt. Bei mehreren offenen Meldungen setzt jede den richtigen Wert
+> zurück. Es gibt keine Ablauffrist – der Button bleibt gültig, bis er benutzt wird
+> (die letzten 50 offenen Undo-Aktionen werden vorgehalten).
 
 ---
 

@@ -32,6 +32,25 @@ sinnvoll für eine HACS-Integration.
     durchgehenden Einsatz, No-op ohne wartenden Einsatz.
 
 ### Added
+- **Zeit direkt aus der Benachrichtigung zurücksetzen:** Die Push-Nachricht nach
+  einem Einsatz/einer Probe/einem Termin enthält jetzt (bei einem
+  `notify.mobile_app_*`-Dienst) einen Aktions-Button „X.Xh zurücksetzen". Per
+  Long-Press auf die iOS-Benachrichtigung (bzw. über die Aktionen) lässt sich die
+  **zuletzt für genau diese Meldung** addierte Zeit wieder abziehen – praktisch,
+  wenn eine Erfassung ein Fehler war. Jede Benachrichtigung trägt ein eindeutiges
+  Token, sodass bei mehreren offenen Meldungen jede den **richtigen** Wert
+  zurücksetzt. Nach dem Antippen wird die Original-Meldung durch eine Bestätigung
+  ersetzt („Einsatz: X.Xh zurückgesetzt – neuer Stand: …").
+  - **Kein Ablauf-Fenster**, aber die offenen Undo-Datensätze sind auf die letzten
+    50 gedeckelt (älteste fallen raus) – so bleibt der Speicher konstant klein,
+    ohne dass eine Frist konfiguriert werden muss.
+  - Cross-Platform: der Listener reagiert auf `mobile_app_notification_action`
+    **und** das ältere iOS-Event `ios.notification_action_fired`. Kein neues
+    Config-Feld nötig – der Button erscheint automatisch, sobald ein Notify-Dienst
+    hinterlegt ist.
+  - Neue Tests: Undo-Datensatz-Anlage inkl. Action-Button, Zuordnung des richtigen
+    Tokens bei mehreren Meldungen, unbekanntes/doppelt getipptes Token (No-op),
+    Deckelung auf 50, Bestätigung mit gleichem Tag ohne Button, Ende-zu-Ende.
 - **Sonstige Kalender-Termine als Abwesenheit tracken:** Neuer Toggle
   „Alle weiteren Kalendereinträge als ‚Sonstige' Zeit erkennen" (nur in den Modi
   „Kalender"/„Beides"). Ist er aktiv, werden **aktive Kalender-Termine, deren

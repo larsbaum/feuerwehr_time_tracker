@@ -8,7 +8,7 @@ import voluptuous as vol
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall, Event, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
@@ -28,6 +28,9 @@ from .const import (
     CONF_PROBE_COUNT_END,
     CONF_EINSATZ_MAX_HOURS,
     CONF_NOTIFY_SERVICE,
+    UNDO_ACTION_PREFIX,
+    EVENT_MOBILE_APP_NOTIFICATION_ACTION,
+    EVENT_IOS_NOTIFICATION_ACTION,
 )
 from .coordinator import FeuerwehrCoordinator
 
@@ -60,6 +63,27 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         )
     ])
     add_extra_js_url(hass, f"/{DOMAIN}/feuerwehr-time-tracker-card.js?v={CARD_VERSION}")
+
+    # Listen for the companion app's "notification action tapped" event, so a
+    # user can undo an added time straight from the push notification. Registered
+    # once per HA start (like the frontend card). The cross-platform event uses
+    # "action"; the older iOS-only event uses "actionName" – handle both.
+    @callback
+    def _handle_notification_action(event: Event) -> None:
+        action = event.data.get("action") or event.data.get("actionName")
+        if not action or not action.startswith(UNDO_ACTION_PREFIX):
+            return
+        token = action[len(UNDO_ACTION_PREFIX):]
+        for coordinator in list(hass.data.get(DOMAIN, {}).values()):
+            if coordinator.try_undo(token):
+                break
+
+    hass.bus.async_listen(
+        EVENT_MOBILE_APP_NOTIFICATION_ACTION, _handle_notification_action
+    )
+    hass.bus.async_listen(
+        EVENT_IOS_NOTIFICATION_ACTION, _handle_notification_action
+    )
 
     return True
 
