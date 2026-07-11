@@ -1,13 +1,15 @@
 # 🚒 Feuerwehr Zeit-Tracker
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2023.x+-blue.svg)](https://www.home-assistant.io/)
 
-**AKTUELL BEFINDET SICH DIE INTEGRATION NOCH IN DER ENTWICKLUNG!**
-Ich kann daher nicht garantieren, dass keine Probleme bestehen, die euer System beeinträchtigen. Ich freue mich über jeden Hinweis.
+Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der
+**Freiwilligen Feuerwehr** – perfekt im Zusammenspiel mit Integrationen wie Divera o.ä.
 
----
-Eine Home-Assistant-Integration zum automatischen Tracken von Stunden bei der **Freiwilligen Feuerwehr** – perfekt in zusammenarbeit mit Integrationen wie Divera o.ä.
+> ℹ️ Die Integration wird aktiv weiterentwickelt. **Feedback ist ausdrücklich
+> willkommen** – bei Problemen oder Fehlern bitte ein
+> [Issue auf GitHub](https://github.com/larsbaum/feuerwehr_time_tracker/issues)
+> aufmachen.
 
 ---
 

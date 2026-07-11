@@ -11,7 +11,33 @@ sinnvoll für eine HACS-Integration.
 > (`git tag`) einsehbar, die Commit-Messages sind dort allerdings größtenteils
 > unspezifisch ("bugfix").
 
-## [Unreleased]
+## [0.3.0] - 2026-07-11
+
+### ⚠️ BREAKING CHANGES
+- Kategorie „Gerätehaus" wurde vollständig in „Sonstiges" umbenannt:
+  - **Entity:** `sensor.station_hours` → `sensor.other_hours` (Name: „Other
+    Hours"). Bestehende Installationen werden beim ersten Start automatisch
+    migriert (Entity-Registry-Eintrag inkl. `unique_id` wird umgeschrieben,
+    Zählerstände bleiben vollständig erhalten – kein Datenverlust).
+    **Dashboards und Automationen, die `sensor.station_hours` referenzieren,
+    müssen einmalig auf `sensor.other_hours` umgestellt werden.** Die
+    HA-Langzeitstatistik läuft unter der neuen Entity-ID neu an; die
+    Historie der alten ID bleibt in der Datenbank erhalten.
+  - **Service-Kategoriewert:** `category: geratehaus` → `category: sonstiges`
+    (betrifft `feuerwehr_time_tracker.reset` und
+    `feuerwehr_time_tracker.add_minutes`). **Automationen/Skripte mit
+    `category: geratehaus` müssen angepasst werden** (werden sonst mit
+    Validierungsfehler abgelehnt).
+  - **Dashboard-Karte:** Die Config-Schlüssel `show_geratehaus`,
+    `color_geratehaus`, `label_geratehaus`, `entity_geratehaus` sowie der
+    Eintrag `geratehaus` in `category_order` heißen jetzt `…sonstiges`.
+    **Bestehende Karten-Anpassungen für diese Kategorie müssen einmalig neu
+    gesetzt werden.** Die Karte crasht mit alten Configs nicht: unbekannte
+    Schlüssel werden ignoriert (Defaults greifen) und die Kategorie-Reihenfolge
+    wird automatisch bereinigt/ergänzt.
+  - **Storage:** Gespeicherte Zählerstände werden beim ersten Start
+    automatisch migriert (`geratehaus_minutes` → `sonstiges_minutes`),
+    es gehen keine Daten verloren.
 
 ### Added
 - **Einsatzzahlen mitzählen:** Drei neue Zähler erfassen die **Anzahl** der Alarme
@@ -43,34 +69,20 @@ sinnvoll für eine HACS-Integration.
   - Neue Tests (`tests/test_counts.py`): Gesamt/Abgerückt/Bereitschaft, „nicht beteiligt",
     `unavailable`-Zwischenzustand (Einfachzählung), Flag-Reset zwischen Alarmen,
     Kurz-Alarm-Präsenz-Fallback, Jahreswechsel-Archivierung, Undo, Services.
-
-### Fixed
-- **Setup-Absturz bei doppelter Kategorie-Identität behoben:** Existierten auf einer
-  Instanz gleichzeitig ein altes `_geratehaus`- **und** bereits ein
-  `_sonstiges`-Entity, brach das Setup mit `ValueError: Unique id '…_sonstiges'
-  is already in use` ab (die Migration prüfte nur die entity_id, nicht die
-  unique_id). Jetzt wird in diesem Fall das verwaiste `_geratehaus`-Entity
-  entfernt (die Zählerstände liegen im Storage, nicht im Entity – kein
-  Datenverlust). Neuer Test dafür.
-
-- **Zwei aufeinanderfolgende Alarme wurden fälschlich zusammengerechnet:**
-  Wer während eines Alarms ans Gerätehaus fuhr, **nicht** abrückte und die Zone
-  wieder verließ (Timer für die Einsatz-Abwesenheit lief an), endete dieser
-  Alarm, und kam Stunden später ein **anderer** Alarm, zu dem man erneut ans
-  Gerätehaus fuhr — dann wurde die komplette Zwischenzeit (im Beispiel ~3 h,
-  daheim verbracht) beim Zurückkehren als Einsatz gutgeschrieben. Ursache: beim
-  Betreten der Zone wurde nur geprüft, ob der Alarm *gerade* aktiv ist, nicht ob
-  es **derselbe** Alarm wie beim Verlassen war.
-  - **Lösung:** Der Alarm-Sensor wird jetzt zusätzlich auf Zustandswechsel
-    überwacht. Verlässt der Alarm den `on`-Zustand (er war zwischenzeitlich also
-    aus), wird ein wartender Einsatz-Start sofort verworfen — ein späterer,
-    anderer Alarm kann die Lücke damit nicht mehr fälschlich als Einsatz zählen.
-    Ein echter Einsatz mit Abrücken (Alarm bleibt durchgehend aktiv) wird
-    unverändert korrekt gezählt.
-  - Neue Tests: Verwerfen bei Alarm-Aus zwischen zwei Alarmen, Regression für den
-    durchgehenden Einsatz, No-op ohne wartenden Einsatz.
-
-### Added
+- **Automatischer Jahreswechsel-Reset:** Am 1. Januar werden die drei
+  Stundenzähler (Einsatz/Probe/Sonstiges) automatisch auf 0 zurückgesetzt,
+  sodass die Sensoren immer nur das laufende Jahr zählen. Die Vorjahreswerte
+  gehen nicht verloren: Sie werden **vor** dem Reset persistent archiviert
+  (crash-sicher – das Archiv wird zuerst gespeichert, erst danach werden die
+  Zähler genullt) und sind im neuen Sensor-Attribut `previous_years`
+  einsehbar (pro Kategorie-Sensor der eigene Jahreswert in Minuten/Stunden,
+  am Gesamt-Sensor die volle Aufschlüsselung aller Kategorien). Es werden
+  keine neuen Entities angelegt und keine bestehenden Entities umbenannt.
+  Funktioniert auch, wenn Home Assistant über den Jahreswechsel offline war
+  (Reset wird beim nächsten Start nachgeholt).
+- Neue Tests: Storage-Migration, Entity-Registry-Migration (inkl.
+  Kollisionsfall bei mehreren Instanzen) und Jahreswechsel-Logik
+  (Archivierung, Idempotenz, Offline-Lücke, Save-vor-Reset-Reihenfolge).
 - **Zeit direkt aus der Benachrichtigung zurücksetzen:** Die Push-Nachricht nach
   einem Einsatz/einer Probe/einem Termin enthält jetzt (bei einem
   `notify.mobile_app_*`-Dienst) einen Aktions-Button „X.Xh zurücksetzen". Per
@@ -119,47 +131,30 @@ sinnvoll für eine HACS-Integration.
   Neu wird sie zusätzlich auf „Max. Probedauer" gekappt (Standard 6 h;
   **gekappt, nicht verworfen** — im Unterschied zum Einsatz).
 
-### ⚠️ BREAKING CHANGES
-- Kategorie „Gerätehaus" wurde vollständig in „Sonstiges" umbenannt:
-  - **Entity:** `sensor.station_hours` → `sensor.other_hours` (Name: „Other
-    Hours"). Bestehende Installationen werden beim ersten Start automatisch
-    migriert (Entity-Registry-Eintrag inkl. `unique_id` wird umgeschrieben,
-    Zählerstände bleiben vollständig erhalten – kein Datenverlust).
-    **Dashboards und Automationen, die `sensor.station_hours` referenzieren,
-    müssen einmalig auf `sensor.other_hours` umgestellt werden.** Die
-    HA-Langzeitstatistik läuft unter der neuen Entity-ID neu an; die
-    Historie der alten ID bleibt in der Datenbank erhalten.
-  - **Service-Kategoriewert:** `category: geratehaus` → `category: sonstiges`
-    (betrifft `feuerwehr_time_tracker.reset` und
-    `feuerwehr_time_tracker.add_minutes`). **Automationen/Skripte mit
-    `category: geratehaus` müssen angepasst werden** (werden sonst mit
-    Validierungsfehler abgelehnt).
-  - **Dashboard-Karte:** Die Config-Schlüssel `show_geratehaus`,
-    `color_geratehaus`, `label_geratehaus`, `entity_geratehaus` sowie der
-    Eintrag `geratehaus` in `category_order` heißen jetzt `…sonstiges`.
-    **Bestehende Karten-Anpassungen für diese Kategorie müssen einmalig neu
-    gesetzt werden.** Die Karte crasht mit alten Configs nicht: unbekannte
-    Schlüssel werden ignoriert (Defaults greifen) und die Kategorie-Reihenfolge
-    wird automatisch bereinigt/ergänzt.
-  - **Storage:** Gespeicherte Zählerstände werden beim ersten Start
-    automatisch migriert (`geratehaus_minutes` → `sonstiges_minutes`),
-    es gehen keine Daten verloren.
-
-### Added
-- **Automatischer Jahreswechsel-Reset:** Am 1. Januar werden die drei
-  Stundenzähler (Einsatz/Probe/Sonstiges) automatisch auf 0 zurückgesetzt,
-  sodass die Sensoren immer nur das laufende Jahr zählen. Die Vorjahreswerte
-  gehen nicht verloren: Sie werden **vor** dem Reset persistent archiviert
-  (crash-sicher – das Archiv wird zuerst gespeichert, erst danach werden die
-  Zähler genullt) und sind im neuen Sensor-Attribut `previous_years`
-  einsehbar (pro Kategorie-Sensor der eigene Jahreswert in Minuten/Stunden,
-  am Gesamt-Sensor die volle Aufschlüsselung aller Kategorien). Es werden
-  keine neuen Entities angelegt und keine bestehenden Entities umbenannt.
-  Funktioniert auch, wenn Home Assistant über den Jahreswechsel offline war
-  (Reset wird beim nächsten Start nachgeholt).
-- Neue Tests: Storage-Migration, Entity-Registry-Migration (inkl.
-  Kollisionsfall bei mehreren Instanzen) und Jahreswechsel-Logik
-  (Archivierung, Idempotenz, Offline-Lücke, Save-vor-Reset-Reihenfolge).
+### Fixed
+- **Setup-Absturz bei doppelter Kategorie-Identität behoben:** Existierten auf einer
+  Instanz gleichzeitig ein altes `_geratehaus`- **und** bereits ein
+  `_sonstiges`-Entity, brach das Setup mit `ValueError: Unique id '…_sonstiges'
+  is already in use` ab (die Migration prüfte nur die entity_id, nicht die
+  unique_id). Jetzt wird in diesem Fall das verwaiste `_geratehaus`-Entity
+  entfernt (die Zählerstände liegen im Storage, nicht im Entity – kein
+  Datenverlust). Neuer Test dafür.
+- **Zwei aufeinanderfolgende Alarme wurden fälschlich zusammengerechnet:**
+  Wer während eines Alarms ans Gerätehaus fuhr, **nicht** abrückte und die Zone
+  wieder verließ (Timer für die Einsatz-Abwesenheit lief an), endete dieser
+  Alarm, und kam Stunden später ein **anderer** Alarm, zu dem man erneut ans
+  Gerätehaus fuhr — dann wurde die komplette Zwischenzeit (im Beispiel ~3 h,
+  daheim verbracht) beim Zurückkehren als Einsatz gutgeschrieben. Ursache: beim
+  Betreten der Zone wurde nur geprüft, ob der Alarm *gerade* aktiv ist, nicht ob
+  es **derselbe** Alarm wie beim Verlassen war.
+  - **Lösung:** Der Alarm-Sensor wird jetzt zusätzlich auf Zustandswechsel
+    überwacht. Verlässt der Alarm den `on`-Zustand (er war zwischenzeitlich also
+    aus), wird ein wartender Einsatz-Start sofort verworfen — ein späterer,
+    anderer Alarm kann die Lücke damit nicht mehr fälschlich als Einsatz zählen.
+    Ein echter Einsatz mit Abrücken (Alarm bleibt durchgehend aktiv) wird
+    unverändert korrekt gezählt.
+  - Neue Tests: Verwerfen bei Alarm-Aus zwischen zwei Alarmen, Regression für den
+    durchgehenden Einsatz, No-op ohne wartenden Einsatz.
 
 ## [0.2.7] - 2026-07-10
 
