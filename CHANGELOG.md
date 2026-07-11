@@ -13,6 +13,37 @@ sinnvoll für eine HACS-Integration.
 
 ## [Unreleased]
 
+### Added
+- **Einsatzzahlen mitzählen:** Drei neue Zähler erfassen die **Anzahl** der Alarme
+  (zusätzlich zu den Stunden) und werden **beim Wechsel des Alarm-Sensors auf `off`**
+  ausgewertet – zu diesem Zeitpunkt sind Abrücken/Bereitschaft des laufenden Alarms
+  bereits vollständig getrackt.
+  - `sensor.einsatze_gesamt` („Einsätze Gesamt") – **jeder** Alarm, egal wo man ist / ob
+    man beteiligt war.
+  - `sensor.einsatze_abgeruckt` („Einsätze Abgerückt") – jeder Alarm, bei dem man auch
+    **abgerückt** ist (definiert als: beim Zurückkommen wurden Einsatz-Minuten addiert).
+  - `sensor.einsatze_bereitschaft` („Einsätze Bereitschaft") – Alarme, bei denen man am
+    **Gerätehaus** war, aber **nicht** abgerückt ist.
+  - **Gruppierung:** Die drei Zähler sind **Diagnose-Entities** (`entity_category:
+    diagnostic`) und erscheinen dadurch auf **demselben** Gerät im Abschnitt „Diagnose",
+    getrennt von den Stunden-Sensoren unter „Sensoren". (HA erlaubt keine frei benannten
+    Kategorien – nur `config`/`diagnostic`.)
+  - **Push mit Zurücksetzen-Button:** Ist ein `notify.mobile_app_*`-Dienst hinterlegt,
+    kommt pro gezähltem Alarm eine Benachrichtigung „🚒 Einsatz gezählt" mit einem
+    **„Einsatz zurücksetzen"**-Button (iOS-Action), der **genau diesen** Alarm wieder
+    abzieht (Gesamt + Unterkategorie) – falls ein Alarm ein Fehler war. Nutzt denselben
+    Undo-Mechanismus wie die Zeiten.
+  - **Jahreswechsel:** Wie die Stunden werden die Zähler am 1. Januar auf 0 gesetzt und ins
+    `previous_years`-Archiv geschrieben (crash-sichere Reihenfolge, Offline-Nachholung).
+  - **Robustheit:** Gezählt wird nur bei echtem `on → off`. Ein kurzer Sensor-Ausfall
+    (`unavailable`/`unknown`) mitten im Einsatz zählt **nicht** doppelt.
+  - **Neue Services:** `feuerwehr_time_tracker.reset_count`
+    (`gesamt|abgerueckt|bereitschaft|all`) und `feuerwehr_time_tracker.add_count`
+    (Kategorie + `count`, negativ zum Abziehen, Untergrenze 0) zur manuellen Korrektur.
+  - Neue Tests (`tests/test_counts.py`): Gesamt/Abgerückt/Bereitschaft, „nicht beteiligt",
+    `unavailable`-Zwischenzustand (Einfachzählung), Flag-Reset zwischen Alarmen,
+    Kurz-Alarm-Präsenz-Fallback, Jahreswechsel-Archivierung, Undo, Services.
+
 ### Fixed
 - **Setup-Absturz bei doppelter Kategorie-Identität behoben:** Existierten auf einer
   Instanz gleichzeitig ein altes `_geratehaus`- **und** bereits ein

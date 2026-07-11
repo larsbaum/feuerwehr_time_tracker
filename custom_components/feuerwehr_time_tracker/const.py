@@ -49,6 +49,14 @@ DATA_CURRENT_YEAR = "current_year"         # int or None (year the counters belo
 DATA_PREVIOUS_YEARS = "previous_years"     # dict[str, dict[str, int]] archived totals
 DATA_PENDING_UNDOS = "pending_undos"       # dict[token, {category, minutes, created}]
 
+# Mission counters (Einsatzzahlen) – incremented when the alarm sensor turns off.
+DATA_COUNT_TOTAL = "einsatz_count_total"           # every alarm
+DATA_COUNT_RESPONDED = "einsatz_count_abgerueckt"  # alarms where the member turned out
+DATA_COUNT_STANDBY = "einsatz_count_bereitschaft"  # at the station but not turned out
+# Per-alarm flags (persisted, additive – storage version stays 1). Reset per alarm.
+DATA_ALARM_RESPONDED = "alarm_responded"    # bool: member turned out during current alarm
+DATA_ALARM_AT_STATION = "alarm_at_station"  # bool: member was at the station this alarm
+
 # Undo-via-notification: keep at most this many pending undo records. There is no
 # time-based expiry; instead the oldest records are pruned once the cap is hit, so
 # storage stays bounded without needing a config option.
@@ -70,6 +78,24 @@ CATEGORY_LABELS = {
     "sonstiges": "Sonstiges",
 }
 
+# Undo record type marker. Time records stay type-less (backwards compatible);
+# count records carry {"type": UNDO_TYPE_COUNT, "increments": [...]}.
+UNDO_TYPE_COUNT = "count"
+
+# Mission-count category tokens (services + undo) -> data key.
+COUNT_KEY_MAP = {
+    "gesamt": DATA_COUNT_TOTAL,
+    "abgerueckt": DATA_COUNT_RESPONDED,
+    "bereitschaft": DATA_COUNT_STANDBY,
+}
+
+# Human-readable count-category labels for the undo confirmation message.
+COUNT_CATEGORY_LABELS = {
+    "gesamt": "Einsätze Gesamt",
+    "abgerueckt": "Abgerückt",
+    "bereitschaft": "Bereitschaft",
+}
+
 # Legacy keys (pre-rename "geratehaus" -> "sonstiges"), only used for migration
 LEGACY_DATA_GERATEHAUS_MINUTES = "geratehaus_minutes"
 LEGACY_SENSOR_GERATEHAUS = "geratehaus"
@@ -79,10 +105,16 @@ SENSOR_EINSATZ = "einsatz"
 SENSOR_PROBE = "probe"
 SENSOR_SONSTIGES = "sonstiges"
 SENSOR_GESAMT = "gesamt"
+# Mission-count sensor unique id suffixes
+SENSOR_COUNT_TOTAL = "einsatz_count"
+SENSOR_COUNT_RESPONDED = "einsatz_count_responded"
+SENSOR_COUNT_STANDBY = "einsatz_count_standby"
 
 # Services
 SERVICE_RESET = "reset"
 SERVICE_ADD_MINUTES = "add_minutes"
+SERVICE_RESET_COUNT = "reset_count"
+SERVICE_ADD_COUNT = "add_count"
 
 # Weekday mapping: HA weekday int (0=Mon) → isoweekday (Mon=1)
 WEEKDAY_OPTIONS = {

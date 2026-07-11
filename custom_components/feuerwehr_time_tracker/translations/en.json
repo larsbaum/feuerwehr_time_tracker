@@ -172,6 +172,38 @@
           "description": "Only needed when multiple instances are configured."
         }
       }
+    },
+    "reset_count": {
+      "name": "Reset mission counts",
+      "description": "Resets one or all mission counters to zero.",
+      "fields": {
+        "category": {
+          "name": "Category",
+          "description": "gesamt | abgerueckt | bereitschaft | all"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Only needed when multiple instances are configured."
+        }
+      }
+    },
+    "add_count": {
+      "name": "Add / subtract mission count",
+      "description": "Adds to a mission counter (negative values subtract).",
+      "fields": {
+        "category": {
+          "name": "Category",
+          "description": "gesamt | abgerueckt | bereitschaft"
+        },
+        "count": {
+          "name": "Count",
+          "description": "Amount (negative to subtract)"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Only needed when multiple instances are configured."
+        }
+      }
     }
   }
 }

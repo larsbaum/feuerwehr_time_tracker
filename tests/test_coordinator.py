@@ -19,6 +19,9 @@ from custom_components.feuerwehr_time_tracker.const import (
     CONF_TRACK_OTHER_ABSENCE,
     CONF_ZONE,
     CATEGORY_LABELS,
+    DATA_COUNT_RESPONDED,
+    DATA_COUNT_STANDBY,
+    DATA_COUNT_TOTAL,
     DATA_CURRENT_YEAR,
     DATA_EINSATZ_MINUTES,
     DATA_EINSATZ_STARTED,
@@ -296,6 +299,9 @@ async def test_year_rollover_only_fires_once(hass: HomeAssistant, base_config):
             DATA_EINSATZ_MINUTES: 10,
             DATA_PROBE_MINUTES: 0,
             DATA_SONSTIGES_MINUTES: 0,
+            DATA_COUNT_TOTAL: 0,
+            DATA_COUNT_RESPONDED: 0,
+            DATA_COUNT_STANDBY: 0,
         }
     }
     assert coordinator.einsatz_minutes == 0

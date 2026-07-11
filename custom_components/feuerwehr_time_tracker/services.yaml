@@ -20,6 +20,59 @@ reset:
       selector:
         text:
 
+reset_count:
+  name: Einsatzzahlen zurücksetzen
+  description: Setzt eine oder alle Einsatzzahlen auf 0 zurück.
+  fields:
+    category:
+      name: Kategorie
+      description: "Welche Einsatzzahl zurücksetzen: gesamt | abgerueckt | bereitschaft | all"
+      required: true
+      selector:
+        select:
+          options:
+            - gesamt
+            - abgerueckt
+            - bereitschaft
+            - all
+    entry_id:
+      name: Entry ID (optional)
+      description: Nur bei mehreren Instanzen der Integration nötig.
+      required: false
+      selector:
+        text:
+
+add_count:
+  name: Einsatzzahl hinzufügen / abziehen
+  description: Fügt einer Einsatzzahl einen Wert hinzu. Negative Werte ziehen ab (Minimum ist 0).
+  fields:
+    category:
+      name: Kategorie
+      description: "Ziel-Kategorie: gesamt | abgerueckt | bereitschaft"
+      required: true
+      selector:
+        select:
+          options:
+            - gesamt
+            - abgerueckt
+            - bereitschaft
+    count:
+      name: Anzahl
+      description: Anzahl (negativ zum Abziehen, Minimum ist 0)
+      required: true
+      selector:
+        number:
+          min: -9999
+          max: 9999
+          step: 1
+          mode: box
+    entry_id:
+      name: Entry ID (optional)
+      description: Nur bei mehreren Instanzen der Integration nötig.
+      required: false
+      selector:
+        text:
+
 add_minutes:
   name: Minuten hinzufügen / abziehen
   description: Fügt Minuten zu einer Kategorie hinzu. Negative Werte ziehen Minuten ab.

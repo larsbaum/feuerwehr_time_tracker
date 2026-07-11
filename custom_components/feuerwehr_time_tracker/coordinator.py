@@ -44,10 +44,18 @@ from .const import (
     DATA_CURRENT_YEAR,
     DATA_PREVIOUS_YEARS,
     DATA_PENDING_UNDOS,
+    DATA_COUNT_TOTAL,
+    DATA_COUNT_RESPONDED,
+    DATA_COUNT_STANDBY,
+    DATA_ALARM_RESPONDED,
+    DATA_ALARM_AT_STATION,
     MAX_PENDING_UNDOS,
     UNDO_ACTION_PREFIX,
+    UNDO_TYPE_COUNT,
     NOTIFY_TAG_PREFIX,
     CATEGORY_LABELS,
+    COUNT_KEY_MAP,
+    COUNT_CATEGORY_LABELS,
     LEGACY_DATA_GERATEHAUS_MINUTES,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
@@ -118,6 +126,11 @@ class FeuerwehrCoordinator:
             DATA_CURRENT_YEAR: None,
             DATA_PREVIOUS_YEARS: {},
             DATA_PENDING_UNDOS: {},
+            DATA_COUNT_TOTAL: 0,
+            DATA_COUNT_RESPONDED: 0,
+            DATA_COUNT_STANDBY: 0,
+            DATA_ALARM_RESPONDED: False,
+            DATA_ALARM_AT_STATION: False,
         }
 
         self._unsub_zone = None
@@ -145,6 +158,18 @@ class FeuerwehrCoordinator:
     @property
     def gesamt_minutes(self) -> int:
         return self.einsatz_minutes + self.probe_minutes + self.sonstiges_minutes
+
+    @property
+    def einsatz_count_total(self) -> int:
+        return int(self._data.get(DATA_COUNT_TOTAL, 0))
+
+    @property
+    def einsatz_count_responded(self) -> int:
+        return int(self._data.get(DATA_COUNT_RESPONDED, 0))
+
+    @property
+    def einsatz_count_standby(self) -> int:
+        return int(self._data.get(DATA_COUNT_STANDBY, 0))
 
     def get_previous_years_data(self) -> dict[str, dict[str, int]]:
         """Return a copy of the archived per-year totals."""
@@ -361,17 +386,85 @@ class FeuerwehrCoordinator:
         counts as "the alarm was off in between", mirroring the alarm_on
         definition used elsewhere. A genuine mission keeps the alarm 'on'
         throughout, so this handler never fires for it.
+
+        Additionally this is where the mission counters (Einsatzzahlen) are
+        finalised: a genuine ``on`` -> ``off`` transition counts exactly one
+        alarm and classifies it (Gesamt / Abgerückt / Bereitschaft). Transitions
+        to ``unavailable``/``unknown`` deliberately do NOT count or reset the
+        per-alarm flags, so a brief sensor dropout mid-mission can't double-count.
         """
         new_state = event.data.get("new_state")
-        if new_state is None or new_state.state == "on":
+        old_state = event.data.get("old_state")
+        if new_state is None:
             return
-        if self._data.get(DATA_EINSATZ_STARTED) is not None:
+
+        new_on = new_state.state == "on"
+        old_on = old_state is not None and old_state.state == "on"
+
+        # Discard a pending einsatz_started as soon as the alarm leaves "on"
+        # (unchanged behaviour – guards against two-alarm gap counting).
+        if not new_on and self._data.get(DATA_EINSATZ_STARTED) is not None:
             _LOGGER.info(
                 "Alarm no longer active (%s) – discarding pending einsatz_started",
                 new_state.state,
             )
             self._data[DATA_EINSATZ_STARTED] = None
             self.hass.async_create_task(self._async_save())
+
+        # New alarm starting (off -> on): reset the per-alarm flags defensively,
+        # in case a previous finalize was missed (e.g. HA offline over the off).
+        if not old_on and new_on and old_state is not None and old_state.state == "off":
+            self._data[DATA_ALARM_RESPONDED] = False
+            self._data[DATA_ALARM_AT_STATION] = False
+            self.hass.async_create_task(self._async_save())
+
+        # Alarm ending (on -> off): count and classify this alarm.
+        if old_on and new_state.state == "off":
+            self._finalize_alarm_count(dt_util.now())
+
+    def _person_in_zone(self) -> bool:
+        """Whether the tracked person is currently in the fire-station zone."""
+        person_state = self.hass.states.get(self.get_cfg(CONF_PERSON))
+        return bool(person_state and person_state.state == self._get_zone_name())
+
+    def _finalize_alarm_count(self, now: datetime) -> None:
+        """Count and classify one finished alarm (alarm went on -> off).
+
+        Every alarm bumps the total. It is additionally classified as
+        "Abgerückt" (member turned out – Einsatz minutes were added on return)
+        or, failing that, "Bereitschaft" (member was at the station but did not
+        turn out). An alarm the member had nothing to do with only bumps total.
+        """
+        self._data[DATA_COUNT_TOTAL] = self.einsatz_count_total + 1
+        increments = ["gesamt"]
+
+        responded = bool(self._data.get(DATA_ALARM_RESPONDED))
+        # Current presence covers alarms shorter than one minute tick.
+        at_station = bool(self._data.get(DATA_ALARM_AT_STATION)) or self._person_in_zone()
+
+        if responded:
+            self._data[DATA_COUNT_RESPONDED] = self.einsatz_count_responded + 1
+            increments.append("abgerueckt")
+            subcat = "abgerueckt"
+        elif at_station:
+            self._data[DATA_COUNT_STANDBY] = self.einsatz_count_standby + 1
+            increments.append("bereitschaft")
+            subcat = "bereitschaft"
+        else:
+            subcat = None
+
+        # Reset the per-alarm flags for the next alarm.
+        self._data[DATA_ALARM_RESPONDED] = False
+        self._data[DATA_ALARM_AT_STATION] = False
+
+        _LOGGER.info(
+            "Alarm counted: total=%d (%s)",
+            self.einsatz_count_total,
+            subcat or "nur Gesamt",
+        )
+        self._notify_sensors()
+        self.hass.async_create_task(self._async_save())
+        self._maybe_notify_count(subcat, increments)
 
     def _on_zone_leave(self, now: datetime, alarm_entity: str) -> None:
         """Handle zone leave: set start timestamps if conditions match."""
@@ -415,6 +508,9 @@ class FeuerwehrCoordinator:
                         int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + delta
                     )
                     _LOGGER.info("Einsatz: added %d min (total: %d min)", delta, self._data[DATA_EINSATZ_MINUTES])
+                    # Minutes were added on return during an active alarm → the
+                    # member turned out ("abgerückt") for this alarm.
+                    self._data[DATA_ALARM_RESPONDED] = True
                     self._maybe_notify(
                         "🚒 Einsatz beendet",
                         f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_EINSATZ_MINUTES])}",
@@ -504,6 +600,10 @@ class FeuerwehrCoordinator:
         # Einsatz: alarm active → count as Einsatz, not Sonstiges
         if alarm_on:
             self._data[DATA_EINSATZ_MINUTES] = int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + 1
+            # Present at the station during an active alarm → mark this alarm as
+            # "Bereitschaft" candidate (used at finalize unless the member also
+            # turned out, which takes priority).
+            self._data[DATA_ALARM_AT_STATION] = True
             _LOGGER.debug("Einsatz minute tick (in zone): total=%d", self._data[DATA_EINSATZ_MINUTES])
         # Probe counting: check based on configured mode
         elif self._is_probe_count_active(now):
@@ -561,6 +661,9 @@ class FeuerwehrCoordinator:
                 DATA_EINSATZ_MINUTES: self.einsatz_minutes,
                 DATA_PROBE_MINUTES: self.probe_minutes,
                 DATA_SONSTIGES_MINUTES: self.sonstiges_minutes,
+                DATA_COUNT_TOTAL: self.einsatz_count_total,
+                DATA_COUNT_RESPONDED: self.einsatz_count_responded,
+                DATA_COUNT_STANDBY: self.einsatz_count_standby,
             }
             self._data[DATA_PREVIOUS_YEARS] = previous_years
 
@@ -571,6 +674,9 @@ class FeuerwehrCoordinator:
             self._data[DATA_EINSATZ_MINUTES] = 0
             self._data[DATA_PROBE_MINUTES] = 0
             self._data[DATA_SONSTIGES_MINUTES] = 0
+            self._data[DATA_COUNT_TOTAL] = 0
+            self._data[DATA_COUNT_RESPONDED] = 0
+            self._data[DATA_COUNT_STANDBY] = 0
             self._data[DATA_CURRENT_YEAR] = new_year
 
             # Step 4: push to sensors and persist the reset state.
@@ -618,6 +724,30 @@ class FeuerwehrCoordinator:
             self._notify_sensors()
             self.hass.async_create_task(self._async_save())
             _LOGGER.info("Added %d min to %s", minutes, category)
+
+    def reset_count(self, category: str) -> None:
+        """Reset a mission counter to 0 (``all`` resets all three)."""
+        if category == "all":
+            for key in COUNT_KEY_MAP.values():
+                self._data[key] = 0
+        elif category in COUNT_KEY_MAP:
+            self._data[COUNT_KEY_MAP[category]] = 0
+        else:
+            return
+        self._notify_sensors()
+        self.hass.async_create_task(self._async_save())
+        _LOGGER.info("Reset count: %s", category)
+
+    def add_count(self, category: str, count: int) -> None:
+        """Manually add or subtract from a mission counter (clamped at 0)."""
+        key = COUNT_KEY_MAP.get(category)
+        if key is None:
+            return
+        current = int(self._data.get(key, 0))
+        self._data[key] = max(0, current + count)
+        self._notify_sensors()
+        self.hass.async_create_task(self._async_save())
+        _LOGGER.info("Added %d to count %s", count, category)
 
     # ------------------------------------------------------------------
     # Sensor listener registration
@@ -688,6 +818,57 @@ class FeuerwehrCoordinator:
             )
         )
 
+    def _maybe_notify_count(self, subcat: str | None, increments: list[str]) -> None:
+        """Notify about a counted alarm, with an "Einsatz zurücksetzen" button.
+
+        The undo record stores the ``increments`` list so tapping the button
+        reverts exactly this alarm (total + the one sub-category, if any).
+        """
+        notify_service = self.get_cfg(CONF_NOTIFY_SERVICE, "")
+        if not notify_service:
+            return
+
+        detail = {
+            "abgerueckt": "abgerückt",
+            "bereitschaft": "Bereitschaft",
+        }.get(subcat, "nicht vor Ort")
+        total = self.einsatz_count_total
+        message = (
+            f"Einsatz #{total} – {detail} "
+            f"(Gesamt: {total}, Abgerückt: {self.einsatz_count_responded}, "
+            f"Bereitschaft: {self.einsatz_count_standby})"
+        )
+
+        token = secrets.token_hex(4).upper()
+        self._data.setdefault(DATA_PENDING_UNDOS, {})[token] = {
+            "type": UNDO_TYPE_COUNT,
+            "increments": list(increments),
+            "created": dt_util.now().timestamp(),
+        }
+        self._prune_pending_undos()
+        payload: dict[str, Any] = {
+            "title": "🚒 Einsatz gezählt",
+            "message": message,
+            "data": {
+                "tag": f"{NOTIFY_TAG_PREFIX}{token}",
+                "actions": [
+                    {
+                        "action": f"{UNDO_ACTION_PREFIX}{token}",
+                        "title": "Einsatz zurücksetzen",
+                        "destructive": True,
+                    }
+                ],
+            },
+        }
+        self.hass.async_create_task(self._async_save())
+        self.hass.async_create_task(
+            self.hass.services.async_call(
+                "notify",
+                notify_service.replace("notify.", ""),
+                payload,
+            )
+        )
+
     def _prune_pending_undos(self) -> None:
         """Keep only the newest MAX_PENDING_UNDOS records (no time expiry)."""
         undos = self._data.get(DATA_PENDING_UNDOS, {})
@@ -712,6 +893,23 @@ class FeuerwehrCoordinator:
         record = self._data.get(DATA_PENDING_UNDOS, {}).pop(token, None)
         if record is None:
             return False
+
+        # Mission-count undo: revert each counter incremented for this alarm.
+        if record.get("type") == UNDO_TYPE_COUNT:
+            for cat in record.get("increments", []):
+                self.add_count(cat, -1)  # clamps at 0, notifies + saves
+            self._clear_notification(f"{NOTIFY_TAG_PREFIX}{token}")
+            self._notify_raw(
+                "↩️ Einsatz zurückgesetzt",
+                f"Neuer Stand – Gesamt: {self.einsatz_count_total}, "
+                f"Abgerückt: {self.einsatz_count_responded}, "
+                f"Bereitschaft: {self.einsatz_count_standby}",
+                tag=f"{NOTIFY_TAG_PREFIX}done_{token}",
+            )
+            # add_count already saved, but the popped token must be persisted too.
+            self.hass.async_create_task(self._async_save())
+            _LOGGER.info("Undo count: reverted %s via token %s", record.get("increments"), token)
+            return True
 
         category = record["category"]
         minutes = int(record["minutes"])

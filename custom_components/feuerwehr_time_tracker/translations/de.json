@@ -172,6 +172,38 @@
           "description": "Nur bei mehreren Instanzen nötig."
         }
       }
+    },
+    "reset_count": {
+      "name": "Einsatzzahlen zurücksetzen",
+      "description": "Setzt eine oder alle Einsatzzahlen auf 0 zurück.",
+      "fields": {
+        "category": {
+          "name": "Kategorie",
+          "description": "gesamt | abgerueckt | bereitschaft | all"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Nur bei mehreren Instanzen nötig."
+        }
+      }
+    },
+    "add_count": {
+      "name": "Einsatzzahl hinzufügen / abziehen",
+      "description": "Fügt einer Einsatzzahl einen Wert hinzu (negative Werte ziehen ab).",
+      "fields": {
+        "category": {
+          "name": "Kategorie",
+          "description": "gesamt | abgerueckt | bereitschaft"
+        },
+        "count": {
+          "name": "Anzahl",
+          "description": "Anzahl (negativ zum Abziehen)"
+        },
+        "entry_id": {
+          "name": "Entry ID (optional)",
+          "description": "Nur bei mehreren Instanzen nötig."
+        }
+      }
     }
   }
 }

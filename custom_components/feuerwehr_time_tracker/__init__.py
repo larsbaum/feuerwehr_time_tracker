@@ -18,6 +18,8 @@ from .const import (
     CARD_VERSION,
     SERVICE_RESET,
     SERVICE_ADD_MINUTES,
+    SERVICE_RESET_COUNT,
+    SERVICE_ADD_COUNT,
     CONF_PERSON,
     CONF_ZONE,
     CONF_ALARM,
@@ -44,6 +46,17 @@ SERVICE_RESET_SCHEMA = vol.Schema({
 SERVICE_ADD_MINUTES_SCHEMA = vol.Schema({
     vol.Required("category"): vol.In(["einsatz", "probe", "sonstiges"]),
     vol.Required("minutes"): vol.Coerce(int),
+    vol.Optional("entry_id"): str,
+})
+
+SERVICE_RESET_COUNT_SCHEMA = vol.Schema({
+    vol.Required("category"): vol.In(["gesamt", "abgerueckt", "bereitschaft", "all"]),
+    vol.Optional("entry_id"): str,
+})
+
+SERVICE_ADD_COUNT_SCHEMA = vol.Schema({
+    vol.Required("category"): vol.In(["gesamt", "abgerueckt", "bereitschaft"]),
+    vol.Required("count"): vol.Coerce(int),
     vol.Optional("entry_id"): str,
 })
 
@@ -224,6 +237,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, SERVICE_RESET)
         hass.services.async_remove(DOMAIN, SERVICE_ADD_MINUTES)
+        hass.services.async_remove(DOMAIN, SERVICE_RESET_COUNT)
+        hass.services.async_remove(DOMAIN, SERVICE_ADD_COUNT)
         for unsub in hass.data.pop(UNDO_LISTENERS_KEY, []):
             unsub()
 
@@ -269,9 +284,36 @@ def _register_services(hass: HomeAssistant) -> None:
         else:
             _LOGGER.warning("add_minutes: no coordinator found (entry_id=%s)", entry_id)
 
+    async def handle_reset_count(call: ServiceCall) -> None:
+        category = call.data["category"]
+        entry_id = call.data.get("entry_id")
+        coordinator = _get_coordinator(hass, entry_id)
+        if coordinator:
+            coordinator.reset_count(category)
+            _LOGGER.info("Service reset_count called: category=%s", category)
+        else:
+            _LOGGER.warning("reset_count: no coordinator found (entry_id=%s)", entry_id)
+
+    async def handle_add_count(call: ServiceCall) -> None:
+        category = call.data["category"]
+        count = call.data["count"]
+        entry_id = call.data.get("entry_id")
+        coordinator = _get_coordinator(hass, entry_id)
+        if coordinator:
+            coordinator.add_count(category, count)
+            _LOGGER.info("Service add_count: category=%s, count=%d", category, count)
+        else:
+            _LOGGER.warning("add_count: no coordinator found (entry_id=%s)", entry_id)
+
     hass.services.async_register(
         DOMAIN, SERVICE_RESET, handle_reset, schema=SERVICE_RESET_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_ADD_MINUTES, handle_add_minutes, schema=SERVICE_ADD_MINUTES_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RESET_COUNT, handle_reset_count, schema=SERVICE_RESET_COUNT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_ADD_COUNT, handle_add_count, schema=SERVICE_ADD_COUNT_SCHEMA
     )

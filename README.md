@@ -86,6 +86,34 @@ Am 1. Januar werden alle Zähler automatisch auf 0 zurückgesetzt – so zählen
 - Jeder Kategorie-Sensor trägt seine eigenen Jahreswerte, der Gesamt-Sensor zusätzlich die volle Aufschlüsselung aller Kategorien pro Jahr.
 - Es werden keine neuen Entities angelegt – Dashboards und Automationen funktionieren unverändert weiter.
 
+### 🔢 Einsatzzahlen
+
+Zusätzlich zu den Stunden zählt die Integration die **Anzahl** der Alarme mit – getrennt
+nach Beteiligung. Ausgewertet wird immer **beim Wechsel des Alarm-Sensors auf `off`**, da
+zu diesem Zeitpunkt Abrücken und Bereitschaft des laufenden Alarms bereits vollständig
+getrackt sind.
+
+| Zähler | Zählt … |
+|--------|---------|
+| **Einsätze Gesamt** | **jeden** Alarm – egal wo du bist oder ob du beteiligt warst |
+| **Einsätze Abgerückt** | jeden Alarm, bei dem du **abgerückt** bist (d. h. beim Zurückkommen Einsatz-Minuten addiert wurden) |
+| **Einsätze Bereitschaft** | Alarme, bei denen du am **Gerätehaus** warst, aber **nicht** abgerückt bist |
+
+- Die drei Zähler sind **Diagnose-Entities** und erscheinen auf demselben Gerät im
+  Abschnitt **„Diagnose"** – sauber getrennt von den Stunden-Sensoren unter „Sensoren".
+- **Push mit Zurücksetzen-Button:** Ist ein `notify.mobile_app_*`-Dienst hinterlegt, kommt
+  pro gezähltem Alarm eine Benachrichtigung **„🚒 Einsatz gezählt"** mit einem
+  **„Einsatz zurücksetzen"**-Button. Per Long-Press (bzw. Aktionen) auf die iOS-Meldung
+  lässt sich **genau dieser** Alarm wieder abziehen – praktisch bei einem Fehlalarm.
+- Wie die Stunden werden die Zähler zum **Jahreswechsel** auf 0 gesetzt und im
+  `previous_years`-Attribut archiviert.
+- Nur ein echter `on → off`-Wechsel zählt; ein kurzer Sensor-Ausfall
+  (`unavailable`/`unknown`) mitten im Einsatz zählt **nicht** doppelt.
+
+> **Hinweis:** „Einsätze Gesamt" ist ein eigener Zähler und **nicht** zwingend die Summe von
+> Abgerückt + Bereitschaft – ein Alarm, bei dem du gar nicht am Gerätehaus warst, erhöht nur
+> „Gesamt".
+
 ___
 
 ### 💡 Vorteile
@@ -96,7 +124,9 @@ ___
 - Flexible Probe-Erkennung: fester Wochentag, Kalender oder beides
 - Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende – inkl.
   „X.Xh zurücksetzen"-Button direkt in der iOS-Benachrichtigung
-- Services zum Zurücksetzen oder manuellen Korrigieren
+- Einsatzzahlen (Anzahl der Alarme: gesamt / abgerückt / Bereitschaft) als separate
+  Diagnose-Sensoren – inkl. „Einsatz zurücksetzen"-Button in der Benachrichtigung
+- Services zum Zurücksetzen oder manuellen Korrigieren (Stunden **und** Einsatzzahlen)
 
 ### ❗️ Voraussetzungen
 - Sensor der einen aktiven Alarm anzeigt (z.B. über Divera-Integration)
@@ -182,10 +212,16 @@ Nach der Einrichtung erstellt die Integration automatisch:
 | `sensor.training_hours` | Gesamt-Probestunden | h |
 | `sensor.other_hours` | Sonstige Stunden | h |
 | `sensor.total_hours` | Gesamtstunden (Summe aller Kategorien) | h |
+| `sensor.einsatze_gesamt` | Anzahl aller Alarme (Diagnose) | – |
+| `sensor.einsatze_abgeruckt` | Anzahl Alarme mit Abrücken (Diagnose) | – |
+| `sensor.einsatze_bereitschaft` | Anzahl Alarme in Bereitschaft am Gerätehaus (Diagnose) | – |
 
-Alle Sensoren haben zusätzlich ein `minutes`-Attribut für präzise Auswertungen
-sowie ein `previous_years`-Attribut mit den archivierten Werten abgeschlossener
-Jahre (siehe [Automatischer Jahreswechsel](#%EF%B8%8F-automatischer-jahreswechsel)).
+Die Stunden-Sensoren haben zusätzlich ein `minutes`-Attribut für präzise Auswertungen,
+die Einsatzzahlen ein `count`-Attribut. Alle Sensoren tragen außerdem ein
+`previous_years`-Attribut mit den archivierten Werten abgeschlossener Jahre (siehe
+[Automatischer Jahreswechsel](#%EF%B8%8F-automatischer-jahreswechsel)). Die drei
+Einsatzzahlen-Sensoren sind **Diagnose-Entities** und liegen auf demselben Gerät im
+Abschnitt „Diagnose".
 
 ---
 
@@ -208,6 +244,25 @@ service: feuerwehr_time_tracker.add_minutes
 data:
   category: probe
   minutes: 60    # negativ zum Abziehen
+```
+
+### `feuerwehr_time_tracker.reset_count`
+Setzt eine oder alle Einsatzzahlen auf 0 zurück.
+
+```yaml
+service: feuerwehr_time_tracker.reset_count
+data:
+  category: gesamt   # gesamt | abgerueckt | bereitschaft | all
+```
+
+### `feuerwehr_time_tracker.add_count`
+Korrigiert eine Einsatzzahl manuell (negativ zum Abziehen, Minimum 0).
+
+```yaml
+service: feuerwehr_time_tracker.add_count
+data:
+  category: bereitschaft
+  count: -1
 ```
 
 ---
