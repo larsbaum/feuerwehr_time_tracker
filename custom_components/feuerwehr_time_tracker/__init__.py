@@ -112,10 +112,8 @@ def _register_undo_listener(hass: HomeAssistant) -> None:
             EVENT_IOS_NOTIFICATION_ACTION, _handle_notification_action
         ),
     ]
-    # Startup proof that the new code is loaded and the listener is active.
-    # (WARNING so it is visible without enabling debug logging.)
-    _LOGGER.warning(
-        "Feuerwehr Zeit-Tracker: Undo-Listener registriert (%s, %s)",
+    _LOGGER.info(
+        "Feuerwehr Zeit-Tracker: undo listener registered (%s, %s)",
         EVENT_MOBILE_APP_NOTIFICATION_ACTION,
         EVENT_IOS_NOTIFICATION_ACTION,
     )
