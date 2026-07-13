@@ -50,12 +50,18 @@ from .const import (
     DATA_ALARM_RESPONDED,
     DATA_ALARM_AT_STATION,
     MAX_PENDING_UNDOS,
+    ACTION_PREFIX,
     UNDO_ACTION_PREFIX,
     UNDO_TYPE_COUNT,
     NOTIFY_TAG_PREFIX,
     CATEGORY_LABELS,
     COUNT_KEY_MAP,
     COUNT_CATEGORY_LABELS,
+    COUNT_ACTION_DELETE,
+    COUNT_RECLASS_VERB_TO_SUBCAT,
+    SUBCAT_TO_RECLASS_VERB,
+    COUNT_CLASS_LABELS,
+    COUNT_SUBCAT_ORDER,
     LEGACY_DATA_GERATEHAUS_MINUTES,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
@@ -818,20 +824,47 @@ class FeuerwehrCoordinator:
             )
         )
 
-    def _maybe_notify_count(self, subcat: str | None, increments: list[str]) -> None:
-        """Notify about a counted alarm, with an "Einsatz zurücksetzen" button.
+    def _build_count_actions(
+        self, token: str, current_subcat: str | None
+    ) -> list[dict[str, Any]]:
+        """Build the action buttons for a mission-count notification.
 
-        The undo record stores the ``increments`` list so tapping the button
-        reverts exactly this alarm (total + the one sub-category, if any).
+        Offers the two *other* classifications (Abgerückt / Bereitschaft / nicht
+        anwesend – the currently set one is skipped) plus a "delete" button.
+        """
+        actions: list[dict[str, Any]] = []
+        for sub in COUNT_SUBCAT_ORDER:
+            if sub == current_subcat:
+                continue
+            verb = SUBCAT_TO_RECLASS_VERB[sub]
+            actions.append(
+                {
+                    "action": f"{ACTION_PREFIX}{verb}_{token}",
+                    "title": f"Als {COUNT_CLASS_LABELS[sub]}",
+                }
+            )
+        actions.append(
+            {
+                "action": f"{ACTION_PREFIX}{COUNT_ACTION_DELETE}_{token}",
+                "title": "Einsatz löschen",
+                "destructive": True,
+            }
+        )
+        return actions
+
+    def _maybe_notify_count(self, subcat: str | None, increments: list[str]) -> None:
+        """Notify about a counted alarm, with reclassify + delete buttons.
+
+        The undo record stores the ``increments`` list so the buttons can revert
+        or re-shuffle exactly this alarm (total + the one sub-category, if any).
+        The notification offers the two other classifications and a delete
+        button (see :meth:`_build_count_actions`).
         """
         notify_service = self.get_cfg(CONF_NOTIFY_SERVICE, "")
         if not notify_service:
             return
 
-        detail = {
-            "abgerueckt": "abgerückt",
-            "bereitschaft": "Bereitschaft",
-        }.get(subcat, "nicht vor Ort")
+        detail = COUNT_CLASS_LABELS.get(subcat, COUNT_CLASS_LABELS[None])
         total = self.einsatz_count_total
         message = (
             f"Einsatz #{total} – {detail} "
@@ -851,13 +884,7 @@ class FeuerwehrCoordinator:
             "message": message,
             "data": {
                 "tag": f"{NOTIFY_TAG_PREFIX}{token}",
-                "actions": [
-                    {
-                        "action": f"{UNDO_ACTION_PREFIX}{token}",
-                        "title": "Einsatz zurücksetzen",
-                        "destructive": True,
-                    }
-                ],
+                "actions": self._build_count_actions(token, subcat),
             },
         }
         self.hass.async_create_task(self._async_save())
@@ -878,6 +905,19 @@ class FeuerwehrCoordinator:
         ordered = sorted(undos.items(), key=lambda kv: kv[1].get("created", 0))
         for token, _rec in ordered[: len(undos) - MAX_PENDING_UNDOS]:
             undos.pop(token, None)
+
+    def handle_notification_action(self, verb: str, token: str) -> bool:
+        """Dispatch a tapped notification action (FWTT_<VERB>_<TOKEN>).
+
+        Returns True if the verb+token matched a pending record and was handled.
+        """
+        verb = str(verb).upper()
+        if verb == "UNDO" or verb == COUNT_ACTION_DELETE:
+            # Time-undo and count-delete both revert their record via try_undo.
+            return self.try_undo(token)
+        if verb in COUNT_RECLASS_VERB_TO_SUBCAT:
+            return self.try_reclassify_count(token, COUNT_RECLASS_VERB_TO_SUBCAT[verb])
+        return False
 
     def try_undo(self, token: str) -> bool:
         """Undo a previously notified time addition, identified by ``token``.
@@ -900,7 +940,7 @@ class FeuerwehrCoordinator:
                 self.add_count(cat, -1)  # clamps at 0, notifies + saves
             self._clear_notification(f"{NOTIFY_TAG_PREFIX}{token}")
             self._notify_raw(
-                "↩️ Einsatz zurückgesetzt",
+                "🗑️ Einsatz gelöscht",
                 f"Neuer Stand – Gesamt: {self.einsatz_count_total}, "
                 f"Abgerückt: {self.einsatz_count_responded}, "
                 f"Bereitschaft: {self.einsatz_count_standby}",
@@ -908,7 +948,7 @@ class FeuerwehrCoordinator:
             )
             # add_count already saved, but the popped token must be persisted too.
             self.hass.async_create_task(self._async_save())
-            _LOGGER.info("Undo count: reverted %s via token %s", record.get("increments"), token)
+            _LOGGER.info("Delete count: reverted %s via token %s", record.get("increments"), token)
             return True
 
         category = record["category"]
@@ -916,6 +956,13 @@ class FeuerwehrCoordinator:
         # add_minutes clamps at 0, notifies sensors and saves _data (which no
         # longer contains the popped token).
         self.add_minutes(category, -minutes)
+
+        # Undoing the Einsatz time means the member did NOT actually turn out for
+        # this alarm – clear the "abgerückt" flag so a later _finalize_alarm_count
+        # classifies the alarm as Bereitschaft (or only Gesamt) instead of
+        # Abgerückt. Harmless no-op if the alarm already finalized (flag is False).
+        if category == "einsatz":
+            self._data[DATA_ALARM_RESPONDED] = False
 
         new_total = int(self._data.get(f"{category}_minutes", 0))
         label = CATEGORY_LABELS.get(category, category)
@@ -931,6 +978,55 @@ class FeuerwehrCoordinator:
             tag=f"{NOTIFY_TAG_PREFIX}done_{token}",
         )
         _LOGGER.info("Undo %s: removed %d min via token %s", category, minutes, token)
+        return True
+
+    def try_reclassify_count(self, token: str, target_subcat: str | None) -> bool:
+        """Re-classify a counted alarm to a different sub-category.
+
+        Moves one count between the Abgerückt/Bereitschaft sub-counters (or to
+        "nicht anwesend" = only total, when ``target_subcat`` is None). The total
+        stays untouched – only the sub-category classification changes. Sends a
+        plain confirmation ("🔀 Einsatz geändert") without further action buttons.
+        Idempotent: an unknown/already-used token is a no-op returning False.
+        """
+        token = str(token).upper()
+        record = self._data.get(DATA_PENDING_UNDOS, {}).get(token)
+        if record is None or record.get("type") != UNDO_TYPE_COUNT:
+            return False
+
+        increments = record.get("increments", [])
+        current_subcat: str | None = None
+        for sub in ("abgerueckt", "bereitschaft"):
+            if sub in increments:
+                current_subcat = sub
+                break
+
+        # Consume the record either way (single correction per notification).
+        self._data.get(DATA_PENDING_UNDOS, {}).pop(token, None)
+        self._clear_notification(f"{NOTIFY_TAG_PREFIX}{token}")
+
+        old_label = COUNT_CLASS_LABELS[current_subcat]
+        new_label = COUNT_CLASS_LABELS[target_subcat]
+
+        if current_subcat != target_subcat:
+            # Shift the count between sub-categories (total unchanged).
+            if current_subcat is not None:
+                self.add_count(current_subcat, -1)  # clamps at 0, notifies + saves
+            if target_subcat is not None:
+                self.add_count(target_subcat, 1)
+
+        self._notify_raw(
+            "🔀 Einsatz geändert",
+            f"{old_label} → {new_label} "
+            f"(Gesamt: {self.einsatz_count_total}, "
+            f"Abgerückt: {self.einsatz_count_responded}, "
+            f"Bereitschaft: {self.einsatz_count_standby})",
+            tag=f"{NOTIFY_TAG_PREFIX}done_{token}",
+        )
+        self.hass.async_create_task(self._async_save())
+        _LOGGER.info(
+            "Reclassify count via token %s: %s -> %s", token, old_label, new_label
+        )
         return True
 
     def _notify_raw(self, title: str, message: str, tag: str | None = None) -> None:

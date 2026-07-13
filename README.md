@@ -101,10 +101,14 @@ getrackt sind.
 
 - Die drei Zähler sind **Diagnose-Entities** und erscheinen auf demselben Gerät im
   Abschnitt **„Diagnose"** – sauber getrennt von den Stunden-Sensoren unter „Sensoren".
-- **Push mit Zurücksetzen-Button:** Ist ein `notify.mobile_app_*`-Dienst hinterlegt, kommt
-  pro gezähltem Alarm eine Benachrichtigung **„🚒 Einsatz gezählt"** mit einem
-  **„Einsatz zurücksetzen"**-Button. Per Long-Press (bzw. Aktionen) auf die iOS-Meldung
-  lässt sich **genau dieser** Alarm wieder abziehen – praktisch bei einem Fehlalarm.
+- **Push mit Umklassifizieren- & Löschen-Buttons:** Ist ein `notify.mobile_app_*`-Dienst
+  hinterlegt, kommt pro gezähltem Alarm eine Benachrichtigung **„🚒 Einsatz gezählt"** mit
+  mehreren Aktionen. Per Long-Press (bzw. Aktionen) auf die iOS-Meldung lässt sich die
+  Einordnung **genau dieses** Alarms direkt korrigieren – **„Als Abgerückt"**,
+  **„Als Bereitschaft"**, **„Als nicht anwesend"** (jeweils die beiden *anderen* Klassen –
+  die aktuelle wird ausgeblendet) oder **„Einsatz löschen"**. Nach jeder Aktion kommt eine
+  kurze Bestätigung, was worauf geändert wurde – praktisch bei einem Fehlalarm oder falsch
+  erkannter Beteiligung.
 - Wie die Stunden werden die Zähler zum **Jahreswechsel** auf 0 gesetzt und im
   `previous_years`-Attribut archiviert.
 - Nur ein echter `on → off`-Wechsel zählt; ein kurzer Sensor-Ausfall
@@ -125,7 +129,7 @@ ___
 - Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende – inkl.
   „X.Xh zurücksetzen"-Button direkt in der iOS-Benachrichtigung
 - Einsatzzahlen (Anzahl der Alarme: gesamt / abgerückt / Bereitschaft) als separate
-  Diagnose-Sensoren – inkl. „Einsatz zurücksetzen"-Button in der Benachrichtigung
+  Diagnose-Sensoren – inkl. Umklassifizieren-/Löschen-Buttons in der Benachrichtigung
 - Services zum Zurücksetzen oder manuellen Korrigieren (Stunden **und** Einsatzzahlen)
 
 ### ❗️ Voraussetzungen

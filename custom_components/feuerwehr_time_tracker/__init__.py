@@ -30,7 +30,7 @@ from .const import (
     CONF_PROBE_COUNT_END,
     CONF_EINSATZ_MAX_HOURS,
     CONF_NOTIFY_SERVICE,
-    UNDO_ACTION_PREFIX,
+    ACTION_PREFIX,
     EVENT_MOBILE_APP_NOTIFICATION_ACTION,
     EVENT_IOS_NOTIFICATION_ACTION,
 )
@@ -92,6 +92,11 @@ def _register_undo_listener(hass: HomeAssistant) -> None:
     a plain integration reload. The cross-platform companion-app event carries
     the identifier under "action"; the older iOS-only event uses "actionName".
     iOS returns identifiers UPPERCASE, so we uppercase before matching.
+
+    Actions use the format ``FWTT_<VERB>_<TOKEN>`` (e.g. FWTT_UNDO_ABCD1234,
+    FWTT_DELETE_…, FWTT_SETABGERUECKT_…). Verbs never contain "_" and tokens are
+    hex, so ``split("_", 2)`` splits them apart unambiguously. The verb + token
+    are dispatched to the coordinators via ``handle_notification_action``.
     """
 
     @callback
@@ -103,16 +108,19 @@ def _register_undo_listener(hass: HomeAssistant) -> None:
             "Notification action event '%s' received: %s", event.event_type, event.data
         )
         action = raw.upper()
-        if not action.startswith(UNDO_ACTION_PREFIX):
+        if not action.startswith(ACTION_PREFIX):
             return
-        token = action[len(UNDO_ACTION_PREFIX):]
+        parts = action.split("_", 2)  # ["FWTT", verb, token]
+        if len(parts) != 3 or not parts[2]:
+            return
+        _, verb, token = parts
         for coordinator in list(hass.data.get(DOMAIN, {}).values()):
-            if coordinator.try_undo(token):
-                _LOGGER.info("Undo applied for token %s", token)
+            if coordinator.handle_notification_action(verb, token):
+                _LOGGER.info("Notification action '%s' applied for token %s", verb, token)
                 return
         # WARNING so it shows up in Settings → System → Logs without enabling debug.
         _LOGGER.warning(
-            "Undo action '%s' received but no pending record matched (token %s)",
+            "Notification action '%s' received but no pending record matched (token %s)",
             raw,
             token,
         )

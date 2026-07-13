@@ -12,6 +12,7 @@ from custom_components.feuerwehr_time_tracker.const import (
     EVENT_IOS_NOTIFICATION_ACTION,
     EVENT_MOBILE_APP_NOTIFICATION_ACTION,
     UNDO_ACTION_PREFIX,
+    UNDO_TYPE_COUNT,
 )
 from custom_components.feuerwehr_time_tracker.coordinator import FeuerwehrCoordinator
 
@@ -91,6 +92,40 @@ async def test_unrelated_action_is_ignored(hass: HomeAssistant):
 
     assert coordinator.einsatz_minutes == 100
     assert "ABCD1234" in coordinator._data[DATA_PENDING_UNDOS]
+
+
+async def test_reclassify_action_event_routes_to_coordinator(hass: HomeAssistant):
+    """A FWTT_SETABGERUECKT_<token> event reclassifies a counted alarm."""
+
+    @callback
+    def _record(call) -> None:  # noqa: ANN001
+        pass
+
+    hass.services.async_register("notify", "mobile_app_test", _record)
+    coordinator = FeuerwehrCoordinator(
+        hass, "entry1", {CONF_NOTIFY_SERVICE: "notify.mobile_app_test"}
+    )
+    coordinator.add_count("gesamt", 1)
+    coordinator.add_count("bereitschaft", 1)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        "ABCD1234": {
+            "type": UNDO_TYPE_COUNT,
+            "increments": ["gesamt", "bereitschaft"],
+            "created": 1.0,
+        }
+    }
+    hass.data.setdefault(DOMAIN, {})["entry1"] = coordinator
+    _register_undo_listener(hass)
+
+    hass.bus.async_fire(
+        EVENT_MOBILE_APP_NOTIFICATION_ACTION,
+        {"action": "FWTT_SETABGERUECKT_ABCD1234"},
+    )
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_count_responded == 1
+    assert coordinator.einsatz_count_standby == 0
+    assert "ABCD1234" not in coordinator._data[DATA_PENDING_UNDOS]
 
 
 async def test_register_undo_listener_stores_unsubs(hass: HomeAssistant):

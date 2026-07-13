@@ -63,7 +63,11 @@ DATA_ALARM_AT_STATION = "alarm_at_station"  # bool: member was at the station th
 MAX_PENDING_UNDOS = 50
 
 # Actionable-notification wiring
-UNDO_ACTION_PREFIX = "FWTT_UNDO_"          # notification action identifier prefix
+# All notification actions share the format FWTT_<VERB>_<TOKEN>. The token is
+# hex (secrets.token_hex) and verbs never contain "_", so action.split("_", 2)
+# yields ["FWTT", verb, token] unambiguously.
+ACTION_PREFIX = "FWTT_"                     # generic action identifier prefix (parse)
+UNDO_ACTION_PREFIX = "FWTT_UNDO_"          # time-undo action identifier prefix (build)
 NOTIFY_TAG_PREFIX = "fwtt_"                # notification tag prefix (per token)
 # Event fired back by the HA companion app when a notification action is tapped.
 # The cross-platform event carries the identifier under "action"; the older
@@ -95,6 +99,25 @@ COUNT_CATEGORY_LABELS = {
     "abgerueckt": "Abgerückt",
     "bereitschaft": "Bereitschaft",
 }
+
+# Notification-action verbs for the mission-count notification.
+COUNT_ACTION_DELETE = "DELETE"             # remove the counted alarm entirely
+# Reclassify verbs -> target sub-category (None = "nicht anwesend", only total).
+COUNT_RECLASS_VERB_TO_SUBCAT = {
+    "SETABGERUECKT": "abgerueckt",
+    "SETBEREITSCHAFT": "bereitschaft",
+    "SETGESAMT": None,
+}
+SUBCAT_TO_RECLASS_VERB = {v: k for k, v in COUNT_RECLASS_VERB_TO_SUBCAT.items()}
+
+# Display labels for an alarm's classification (sub-category). None = only total.
+COUNT_CLASS_LABELS = {
+    "abgerueckt": "Abgerückt",
+    "bereitschaft": "Bereitschaft",
+    None: "nicht anwesend",
+}
+# Fixed order in which reclassify actions are offered.
+COUNT_SUBCAT_ORDER = ("abgerueckt", "bereitschaft", None)
 
 # Legacy keys (pre-rename "geratehaus" -> "sonstiges"), only used for migration
 LEGACY_DATA_GERATEHAUS_MINUTES = "geratehaus_minutes"

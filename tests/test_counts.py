@@ -317,10 +317,10 @@ async def test_year_rollover_archives_and_resets_counts(
 # ----------------------------------------------------------------------
 
 
-async def test_finalize_notify_attaches_reset_button(
+async def test_finalize_notify_attaches_reclassify_and_delete_buttons(
     hass: HomeAssistant, notify_config
 ):
-    """A counted alarm sends a notification with an 'Einsatz zurücksetzen' button."""
+    """A counted alarm sends reclassify buttons (current class hidden) + delete."""
     calls = _register_notify(hass)
     _set_person_in_zone(hass, notify_config)
     hass.states.async_set(notify_config[CONF_ALARM], "on")
@@ -337,9 +337,14 @@ async def test_finalize_notify_attaches_reset_button(
     assert record["type"] == UNDO_TYPE_COUNT
     assert set(record["increments"]) == {"gesamt", "bereitschaft"}
 
-    action = calls[-1].data["data"]["actions"][0]
-    assert action["title"] == "Einsatz zurücksetzen"
+    actions = calls[-1].data["data"]["actions"]
     assert calls[-1].data["data"]["tag"] == f"{NOTIFY_TAG_PREFIX}{token}"
+    assert len(actions) == 3
+    titles = [a["title"] for a in actions]
+    # Current class (Bereitschaft) is hidden; the two others + delete remain.
+    assert titles == ["Als Abgerückt", "Als nicht anwesend", "Einsatz löschen"]
+    assert actions[-1]["action"] == f"FWTT_DELETE_{token}"
+    assert actions[0]["action"] == f"FWTT_SETABGERUECKT_{token}"
 
 
 async def test_try_undo_count_reverts_increments(hass: HomeAssistant, notify_config):
@@ -365,7 +370,7 @@ async def test_try_undo_count_reverts_increments(hass: HomeAssistant, notify_con
     assert "TOK" not in coordinator._data[DATA_PENDING_UNDOS]
 
     confirmations = [
-        c for c in calls if c.data.get("title") == "↩️ Einsatz zurückgesetzt"
+        c for c in calls if c.data.get("title") == "🗑️ Einsatz gelöscht"
     ]
     assert len(confirmations) == 1
     assert "actions" not in confirmations[0].data["data"]
@@ -393,6 +398,107 @@ async def test_count_notification_undo_end_to_end(hass: HomeAssistant, notify_co
     assert coordinator.einsatz_count_total == 0
     assert coordinator.einsatz_count_standby == 0
     assert coordinator._data[DATA_PENDING_UNDOS] == {}
+
+
+async def test_undo_einsatz_time_reclassifies_alarm_as_standby(
+    hass: HomeAssistant, notify_config
+):
+    """Storno der Einsatzzeit hebt 'Abgerückt' auf → Alarm zählt als Bereitschaft."""
+    _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    _set_person_in_zone(hass, notify_config)
+    hass.states.async_set(notify_config[CONF_ALARM], "on")
+
+    # At the station during the alarm (Bereitschaft) → at_station flag.
+    coordinator._handle_minute_tick(None)
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_ALARM_AT_STATION] is True
+
+    # Leave and return while the alarm is still on → Einsatz minutes added,
+    # alarm_responded set, an undo record created.
+    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), notify_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    coordinator._on_zone_enter(datetime(2026, 7, 7, 17, 30))
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_ALARM_RESPONDED] is True
+    token = next(iter(coordinator._data[DATA_PENDING_UNDOS]))
+
+    # Undo the Einsatz time → clears the responded flag.
+    assert coordinator.try_undo(token) is True
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_ALARM_RESPONDED] is False
+
+    # Alarm ends → classified as Bereitschaft, not Abgerückt.
+    hass.states.async_set(notify_config[CONF_PERSON], "not_home")
+    coordinator._handle_alarm_state_change(_alarm_event(notify_config, "on", "off"))
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_count_total == 1
+    assert coordinator.einsatz_count_standby == 1
+    assert coordinator.einsatz_count_responded == 0
+
+
+async def test_reclassify_count_standby_to_responded(
+    hass: HomeAssistant, notify_config
+):
+    """Umklassifizieren Bereitschaft → Abgerückt verschiebt den Zähler (Gesamt bleibt)."""
+    calls = _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_count("gesamt", 1)
+    coordinator.add_count("bereitschaft", 1)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        "TOK": {
+            "type": UNDO_TYPE_COUNT,
+            "increments": ["gesamt", "bereitschaft"],
+            "created": 1.0,
+        }
+    }
+    await hass.async_block_till_done()
+
+    assert coordinator.try_reclassify_count("tok", "abgerueckt") is True  # case-insensitive
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_count_total == 1  # unchanged
+    assert coordinator.einsatz_count_standby == 0
+    assert coordinator.einsatz_count_responded == 1
+    assert "TOK" not in coordinator._data[DATA_PENDING_UNDOS]
+
+    confirmations = [c for c in calls if c.data.get("title") == "🔀 Einsatz geändert"]
+    assert len(confirmations) == 1
+    assert "actions" not in confirmations[0].data["data"]
+
+
+async def test_reclassify_count_to_not_present_drops_subcat(
+    hass: HomeAssistant, notify_config
+):
+    """Umklassifizieren auf 'nicht anwesend' zieht die Unterkategorie ab, Gesamt bleibt."""
+    _register_notify(hass)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    coordinator.add_count("gesamt", 1)
+    coordinator.add_count("abgerueckt", 1)
+    coordinator._data[DATA_PENDING_UNDOS] = {
+        "TOK": {
+            "type": UNDO_TYPE_COUNT,
+            "increments": ["gesamt", "abgerueckt"],
+            "created": 1.0,
+        }
+    }
+    await hass.async_block_till_done()
+
+    # handle_notification_action routes the SETGESAMT verb (target None).
+    assert coordinator.handle_notification_action("SETGESAMT", "TOK") is True
+    await hass.async_block_till_done()
+
+    assert coordinator.einsatz_count_total == 1
+    assert coordinator.einsatz_count_responded == 0
+    assert coordinator.einsatz_count_standby == 0
+    assert coordinator._data[DATA_PENDING_UNDOS] == {}
+
+
+async def test_reclassify_unknown_token_is_noop(hass: HomeAssistant, notify_config):
+    """An unknown/already-used token is a no-op returning False."""
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
+    assert coordinator.try_reclassify_count("NOPE", "abgerueckt") is False
 
 
 async def test_counts_persist_across_reload(hass: HomeAssistant, base_config):

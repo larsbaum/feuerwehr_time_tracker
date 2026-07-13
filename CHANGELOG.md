@@ -54,11 +54,15 @@ sinnvoll für eine HACS-Integration.
     diagnostic`) und erscheinen dadurch auf **demselben** Gerät im Abschnitt „Diagnose",
     getrennt von den Stunden-Sensoren unter „Sensoren". (HA erlaubt keine frei benannten
     Kategorien – nur `config`/`diagnostic`.)
-  - **Push mit Zurücksetzen-Button:** Ist ein `notify.mobile_app_*`-Dienst hinterlegt,
-    kommt pro gezähltem Alarm eine Benachrichtigung „🚒 Einsatz gezählt" mit einem
-    **„Einsatz zurücksetzen"**-Button (iOS-Action), der **genau diesen** Alarm wieder
-    abzieht (Gesamt + Unterkategorie) – falls ein Alarm ein Fehler war. Nutzt denselben
-    Undo-Mechanismus wie die Zeiten.
+  - **Push mit Umklassifizieren- & Löschen-Buttons:** Ist ein `notify.mobile_app_*`-Dienst
+    hinterlegt, kommt pro gezähltem Alarm eine Benachrichtigung „🚒 Einsatz gezählt" mit
+    **mehreren iOS-Actions**, um die Einordnung **genau dieses** Alarms direkt aus der
+    Meldung zu korrigieren: „Als Abgerückt", „Als Bereitschaft", „Als nicht anwesend"
+    (jeweils die **beiden anderen** Klassen – die aktuelle wird ausgeblendet) sowie
+    „Einsatz löschen" (zieht Gesamt + Unterkategorie wieder ab). Nach jeder Aktion kommt
+    eine **einfache Bestätigung**, was worauf geändert wurde. So lässt sich jeder
+    Fehlerfall bequem von Hand korrigieren. Nutzt denselben Token-/Undo-Mechanismus wie
+    die Zeiten (weitere Korrekturen zusätzlich über `add_count`/`reset_count`).
   - **Jahreswechsel:** Wie die Stunden werden die Zähler am 1. Januar auf 0 gesetzt und ins
     `previous_years`-Archiv geschrieben (crash-sichere Reihenfolge, Offline-Nachholung).
   - **Robustheit:** Gezählt wird nur bei echtem `on → off`. Ein kurzer Sensor-Ausfall
@@ -132,6 +136,14 @@ sinnvoll für eine HACS-Integration.
   **gekappt, nicht verworfen** — im Unterschied zum Einsatz).
 
 ### Fixed
+- **Storno der Einsatzzeit hebt „Abgerückt" korrekt auf:** Wer während eines Alarms am
+  Gerätehaus war, kurz nach Hause fuhr und wieder zurückkam (die Zwischenzeit wurde als
+  Einsatz addiert) und diese Zeit dann über den Notification-Button stornierte, wurde beim
+  Alarm-Ende trotzdem als **„Abgerückt"** gezählt – das Storno wurde bei der Einordnung
+  ignoriert. Jetzt wird beim Zurücksetzen der Einsatzzeit das interne „abgerückt"-Flag
+  gelöscht, sodass der Alarm korrekt als **„Bereitschaft"** (bzw. nur „Gesamt") gewertet
+  wird. Ist der Alarm schon beendet, hilft das neue manuelle Umklassifizieren aus der
+  Benachrichtigung.
 - **Setup-Absturz bei doppelter Kategorie-Identität behoben:** Existierten auf einer
   Instanz gleichzeitig ein altes `_geratehaus`- **und** bereits ein
   `_sonstiges`-Entity, brach das Setup mit `ValueError: Unique id '…_sonstiges'
