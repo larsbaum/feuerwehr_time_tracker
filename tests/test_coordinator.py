@@ -521,21 +521,63 @@ async def test_keyword_event_tracked_as_probe_not_sonstiges(
     assert coordinator.sonstiges_minutes == 0
 
 
-async def test_other_appointment_capped_at_max(hass: HomeAssistant, calendar_config):
-    """Absence longer than sonstiges_max_hours is capped, not discarded."""
+async def test_other_appointment_discarded_when_over_max(
+    hass: HomeAssistant, calendar_config
+):
+    """Absence longer than sonstiges_max_hours is discarded, not capped."""
     calendar_config[CONF_SONSTIGES_MAX_HOURS] = 2
     _set_calendar(hass, True, "Ganztägiger Lehrgang")
     hass.states.async_set(calendar_config[CONF_ALARM], "off")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
 
     leave = datetime(2026, 7, 8, 8, 0)
-    enter = datetime(2026, 7, 8, 12, 0)  # 4h absence, cap 2h
+    enter = datetime(2026, 7, 8, 12, 0)  # 4h absence, max 2h -> discarded
     coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
     coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
-    assert coordinator.sonstiges_minutes == 120
+    assert coordinator.sonstiges_minutes == 0
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+
+
+async def test_other_appointment_discarded_next_day(
+    hass: HomeAssistant, calendar_config
+):
+    """Reported bug: leave Monday, return ~20h later with max 14h -> discarded."""
+    calendar_config[CONF_SONSTIGES_MAX_HOURS] = 14
+    _set_calendar(hass, True, "Feuerwehr-Termin")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 13, 20, 0)  # Monday evening
+    enter = datetime(2026, 7, 14, 16, 0)  # next day, 20h later
+    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 0
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+
+
+async def test_other_appointment_just_under_max_counts(
+    hass: HomeAssistant, calendar_config
+):
+    """Boundary: an absence just under the max is still counted in full."""
+    calendar_config[CONF_SONSTIGES_MAX_HOURS] = 14
+    _set_calendar(hass, True, "Langer Lehrgang")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 13, 8, 0)
+    enter = datetime(2026, 7, 13, 21, 30)  # 13.5h absence, max 14h -> counts
+    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    coordinator._on_zone_enter(enter)
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 810  # 13.5h * 60
 
 
 async def test_other_appointment_counts_overnight(
@@ -556,15 +598,15 @@ async def test_other_appointment_counts_overnight(
     assert coordinator.sonstiges_minutes == 120
 
 
-async def test_probe_absence_capped_at_max(hass: HomeAssistant, base_config):
-    """Probe absence keeps its day-boundary but is now capped at probe_max_hours."""
+async def test_probe_absence_discarded_when_over_max(hass: HomeAssistant, base_config):
+    """Probe absence keeps its day-boundary and is discarded when over probe_max_hours."""
     base_config[CONF_PROBE_MAX_HOURS] = 2
     hass.states.async_set(base_config[CONF_ALARM], "off")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
 
     # Tuesday, both timestamps inside the probe window (17:00-23:59), same day.
     leave = datetime(2026, 7, 7, 17, 30)
-    enter = datetime(2026, 7, 7, 22, 0)  # 4.5h absence, cap 2h
+    enter = datetime(2026, 7, 7, 22, 0)  # 4.5h absence, max 2h -> discarded
     coordinator._on_zone_leave(leave, base_config[CONF_ALARM])
     await hass.async_block_till_done()
     assert coordinator._data[DATA_PROBE_STARTED] is not None
@@ -572,7 +614,7 @@ async def test_probe_absence_capped_at_max(hass: HomeAssistant, base_config):
     coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
-    assert coordinator.probe_minutes == 120
+    assert coordinator.probe_minutes == 0
 
 
 def _alarm_off_event(config: dict) -> Event:

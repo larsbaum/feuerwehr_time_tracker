@@ -537,9 +537,11 @@ class FeuerwehrCoordinator:
             started_dt = datetime.fromtimestamp(probe_started, tz=now.tzinfo)
             if started_dt.date() == now.date():
                 elapsed = now.timestamp() - probe_started
-                if elapsed > 0:
-                    # Cap (not discard) the absence at probe_max hours.
-                    delta = int(min(elapsed, probe_max * 3600) / 60)
+                # Discard (not cap) an absence that exceeds probe_max hours – a
+                # gap that long was clearly not a real probe, so crediting the
+                # capped maximum would add phantom minutes (mirrors Einsatz).
+                if 0 < elapsed <= probe_max * 3600:
+                    delta = int(elapsed / 60)
                     self._data[DATA_PROBE_MINUTES] = (
                         int(self._data.get(DATA_PROBE_MINUTES, 0)) + delta
                     )
@@ -556,12 +558,13 @@ class FeuerwehrCoordinator:
         sonstiges_started = self._data.get(DATA_SONSTIGES_STARTED)
         if sonstiges_started:
             # NO day-boundary check: an appointment may run past midnight.
-            # The only limit is the sonstiges_max hours cap. The event no
-            # longer needs to be active on return (appointments end).
+            # The event no longer needs to be active on return (appointments end).
             elapsed = now.timestamp() - sonstiges_started
-            if elapsed > 0:
-                # Cap (not discard) the absence at sonstiges_max hours.
-                delta = int(min(elapsed, sonstiges_max * 3600) / 60)
+            # Discard (not cap) an absence that exceeds sonstiges_max hours: a
+            # 20h "appointment" is really "went home overnight", so crediting
+            # the capped maximum would add phantom hours (mirrors Einsatz).
+            if 0 < elapsed <= sonstiges_max * 3600:
+                delta = int(elapsed / 60)
                 self._data[DATA_SONSTIGES_MINUTES] = (
                     int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) + delta
                 )

@@ -122,20 +122,32 @@ sinnvoll für eine HACS-Integration.
   Zone zählt. Ist der Toggle aus, bleibt alles wie bisher.
   - Anders als bei Proben gibt es **keinen** Tagesgrenzen-Schutz: ein sonstiger
     Termin darf über Mitternacht laufen; einziges Limit ist der neue Regler.
-- **Zwei getrennte Zeitregler** zur Begrenzung der Abwesenheit:
+- **Zwei getrennte Zeitregler** als Gültigkeitsgrenze der Abwesenheit:
   - „Max. Probedauer (Stunden)" (Default 6) — begrenzt die Proben-Abwesenheit.
   - „Max. Dauer für Sonstige Termine (Stunden)" (Default 6) — begrenzt die neue
     Sonstiges-Termin-Abwesenheit.
+  - Eine Abwesenheit, die ihr Maximum **überschreitet**, wird **verworfen**
+    (nicht auf das Maximum gekappt) — konsistent mit dem Einsatz.
 - Neue Tests: Sonstiges-Termin-Abwesenheit (getrackt/aus, Keyword=Probe,
-  Deckelung, Über-Nacht) und Deckelung der Proben-Abwesenheit.
+  Verwerfen über Max, Randwert knapp unter Max, Über-Nacht) und Verwerfen der
+  Proben-Abwesenheit über Max.
 
 ### Changed
-- **Proben-Abwesenheit wird jetzt gedeckelt:** Bisher war die beim Verlassen
-  während einer Probe gezählte Abwesenheit nur durch die Tagesgrenze begrenzt.
-  Neu wird sie zusätzlich auf „Max. Probedauer" gekappt (Standard 6 h;
-  **gekappt, nicht verworfen** — im Unterschied zum Einsatz).
+- **Proben-Abwesenheit ist jetzt zeitlich begrenzt:** Bisher war die beim
+  Verlassen während einer Probe gezählte Abwesenheit nur durch die Tagesgrenze
+  begrenzt. Neu gilt zusätzlich „Max. Probedauer" (Standard 6 h) — eine
+  Abwesenheit **über** diesem Wert wird **verworfen** (wie beim Einsatz, siehe
+  auch „Fixed").
 
 ### Fixed
+- **Abwesenheit über dem Maximum wird verworfen statt gekappt:** War man länger
+  als das eingestellte Maximum weg (z. B. Sonstiger Termin am Montagabend, dann
+  über Nacht daheim, Rückkehr erst am nächsten Tag ~20 h später bei „Max. Dauer
+  für Sonstige Termine" = 14 h), wurde die Zeit auf das Maximum **gekappt** und
+  trotzdem gutgeschrieben (im Beispiel 14 h Phantom-Stunden). Jetzt wird eine
+  Abwesenheit, die ihr Maximum überschreitet, **komplett verworfen** — sowohl für
+  **Sonstige Termine** als auch für **Proben**, konsistent mit dem bereits so
+  arbeitenden Einsatz. Abwesenheiten **unter** dem Maximum zählen unverändert voll.
 - **Storno der Einsatzzeit hebt „Abgerückt" korrekt auf:** Wer während eines Alarms am
   Gerätehaus war, kurz nach Hause fuhr und wieder zurückkam (die Zwischenzeit wurde als
   Einsatz addiert) und diese Zeit dann über den Notification-Button stornierte, wurde beim
