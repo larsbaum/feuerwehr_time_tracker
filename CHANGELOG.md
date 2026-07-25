@@ -11,6 +11,33 @@ sinnvoll für eine HACS-Integration.
 > (`git tag`) einsehbar, die Commit-Messages sind dort allerdings größtenteils
 > unspezifisch ("bugfix").
 
+## [0.3.1] - 2026-07-25
+
+> ⚠️ **Vor dem Update lesen:** Kommst du von einer Version **vor 0.3.0**, lies vor
+> dem Herunterladen unbedingt die **Release-Notes zu [0.3.0](#030---2026-07-11)** –
+> dort gibt es **Breaking Changes** (Umbenennung „Gerätehaus" → „Sonstiges", geänderte
+> Entity-ID und Service-Kategoriewerte). 0.3.1 selbst enthält keine Breaking Changes.
+
+### Verbessert – „Sonstige Termine bei Abwesenheit"
+- **Nachlauf-Fenster nach Termin-Ende:** Ein sonstiger Kalender-Termin wird jetzt nur
+  noch gezählt, wenn er beim Verlassen der Zone aktiv ist **und** bei der Rückkehr
+  entweder noch läuft oder erst seit höchstens X Stunden vorbei ist (neuer Regler
+  **„Nachlauf nach Termin-Ende"**, Default 1 h, 0–12 h; 0 = muss bei Rückkehr noch
+  aktiv sein). Kommt man erst deutlich nach Termin-Ende zurück, wird die Abwesenheit
+  **komplett verworfen** statt fälschlich gutgeschrieben. Bisher wurde die Zeit ohne
+  jede Aktiv-Prüfung addiert.
+- **Entfernt:** Der bisherige Regler **„Max. Dauer für Sonstige Termine"**
+  (`sonstiges_max_hours`) entfällt – das neue Nachlauf-Fenster ersetzt ihn vollständig
+  als Gültigkeitsgrenze.
+- **Ganztägige Termine ignorieren** (neuer Schalter, gilt für den gesamten Kalender):
+  Ganztägige Kalendereinträge werden weder als Probe noch als Sonstiges gewertet.
+  Läuft **während** eines ganztägigen Termins ein **kurzer** Termin, wird dieser
+  trotzdem erkannt – dafür werden die Kalender-Ereignisse direkt über
+  `calendar.get_events` abgefragt (die Entity-Attribute zeigen bei mehreren
+  gleichzeitigen Terminen nur den ganztägigen). Fällt der Service für einen Kalender
+  aus, wird sauber auf den bisherigen Attribut-Pfad zurückgefallen. Ist der Schalter
+  aus, bleibt das Verhalten unverändert (kein zusätzlicher Service-Aufruf).
+
 ## [0.3.0] - 2026-07-11
 
 ### ⚠️ BREAKING CHANGES

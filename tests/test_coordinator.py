@@ -1,10 +1,11 @@
 """Tests for FeuerwehrCoordinator behavior."""
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
-from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.core import Event, HomeAssistant, State, SupportsResponse, callback
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from custom_components.feuerwehr_time_tracker.const import (
     CONF_ALARM,
@@ -15,7 +16,8 @@ from custom_components.feuerwehr_time_tracker.const import (
     CONF_PROBE_KEYWORDS,
     CONF_PROBE_MAX_HOURS,
     CONF_PROBE_MODE,
-    CONF_SONSTIGES_MAX_HOURS,
+    CONF_SONSTIGES_GRACE_HOURS,
+    CONF_IGNORE_ALLDAY,
     CONF_TRACK_OTHER_ABSENCE,
     CONF_ZONE,
     CATEGORY_LABELS,
@@ -31,6 +33,7 @@ from custom_components.feuerwehr_time_tracker.const import (
     DATA_PROBE_STARTED,
     DATA_SONSTIGES_MINUTES,
     DATA_SONSTIGES_STARTED,
+    DATA_SONSTIGES_END,
     MAX_PENDING_UNDOS,
     NOTIFY_TAG_PREFIX,
     PROBE_MODE_CALENDAR,
@@ -114,7 +117,7 @@ async def test_minute_tick_counts_as_einsatz_when_alarm_active(
     _set_in_zone(hass, base_config, alarm_on=True)
     coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
 
-    coordinator._handle_minute_tick(None)
+    await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 1
@@ -134,7 +137,7 @@ async def test_minute_tick_counts_as_sonstiges_outside_probe_window(
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=wednesday_noon,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.sonstiges_minutes == 1
@@ -154,7 +157,7 @@ async def test_minute_tick_counts_as_probe_during_configured_window(
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=tuesday_evening,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.probe_minutes == 1
@@ -172,7 +175,7 @@ async def test_minute_tick_ignores_person_outside_zone(
     hass.states.async_set(base_config[CONF_ALARM], "off")
 
     coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
-    coordinator._handle_minute_tick(None)
+    await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.gesamt_minutes == 0
@@ -240,7 +243,7 @@ async def test_first_load_sets_current_year_without_archiving(
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=now,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator._data[DATA_CURRENT_YEAR] == 2026
@@ -261,7 +264,7 @@ async def test_year_rollover_archives_and_resets(hass: HomeAssistant, base_confi
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=new_year,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 0
@@ -288,10 +291,10 @@ async def test_year_rollover_only_fires_once(hass: HomeAssistant, base_config):
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=new_year,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
         await hass.async_block_till_done()
         # Second tick in the same (new) year must be a no-op
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
         await hass.async_block_till_done()
 
     assert coordinator.get_previous_years_data() == {
@@ -322,7 +325,7 @@ async def test_year_rollover_detected_while_person_absent(
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=new_year,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.sonstiges_minutes == 0
@@ -342,7 +345,7 @@ async def test_year_rollover_survives_offline_gap(hass: HomeAssistant, base_conf
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=jan_third,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     previous = coordinator.get_previous_years_data()
@@ -376,7 +379,7 @@ async def test_upgrade_from_old_storage_does_not_archive(
             "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
             return_value=now,
         ):
-            coordinator._handle_minute_tick(None)
+            await coordinator._handle_minute_tick(None)
         await hass.async_block_till_done()
 
         # Counters untouched, baseline year established, no phantom archive
@@ -417,7 +420,7 @@ async def test_rollover_persists_archive_before_reset(
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=new_year,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
         await hass.async_block_till_done()
 
     # First save: archive present AND counters still hold the old values.
@@ -446,7 +449,6 @@ def calendar_config() -> dict:
         CONF_ALARM: "binary_sensor.alarm",
         CONF_EINSATZ_MAX_HOURS: 10,
         CONF_PROBE_MAX_HOURS: 6,
-        CONF_SONSTIGES_MAX_HOURS: 6,
         CONF_PROBE_MODE: PROBE_MODE_CALENDAR,
         CONF_PROBE_CALENDAR: CALENDAR_ENTITY,
         CONF_PROBE_KEYWORDS: "Übung,Probe",
@@ -468,11 +470,11 @@ async def test_other_appointment_absence_tracked(hass: HomeAssistant, calendar_c
 
     leave = datetime(2026, 7, 8, 18, 0)
     enter = datetime(2026, 7, 8, 19, 0)  # 1h absence
-    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
     assert coordinator._data[DATA_SONSTIGES_STARTED] is not None
 
-    coordinator._on_zone_enter(enter)
+    await coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
     assert coordinator.sonstiges_minutes == 60
@@ -490,11 +492,11 @@ async def test_other_appointment_not_tracked_when_toggle_off(
     hass.states.async_set(calendar_config[CONF_ALARM], "off")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
 
-    coordinator._on_zone_leave(datetime(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
     assert coordinator._data[DATA_SONSTIGES_STARTED] is None
 
-    coordinator._on_zone_enter(datetime(2026, 7, 8, 19, 0))
+    await coordinator._on_zone_enter(datetime(2026, 7, 8, 19, 0))
     await hass.async_block_till_done()
     assert coordinator.sonstiges_minutes == 0
 
@@ -509,72 +511,52 @@ async def test_keyword_event_tracked_as_probe_not_sonstiges(
 
     leave = datetime(2026, 7, 8, 18, 0)
     enter = datetime(2026, 7, 8, 19, 0)
-    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
     assert coordinator._data[DATA_PROBE_STARTED] is not None
     assert coordinator._data[DATA_SONSTIGES_STARTED] is None
 
-    coordinator._on_zone_enter(enter)
+    await coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
     assert coordinator.probe_minutes == 60
     assert coordinator.sonstiges_minutes == 0
 
 
-async def test_other_appointment_discarded_when_over_max(
-    hass: HomeAssistant, calendar_config
-):
-    """Absence longer than sonstiges_max_hours is discarded, not capped."""
-    calendar_config[CONF_SONSTIGES_MAX_HOURS] = 2
-    _set_calendar(hass, True, "Ganztägiger Lehrgang")
-    hass.states.async_set(calendar_config[CONF_ALARM], "off")
-    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
-
-    leave = datetime(2026, 7, 8, 8, 0)
-    enter = datetime(2026, 7, 8, 12, 0)  # 4h absence, max 2h -> discarded
-    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
-    await hass.async_block_till_done()
-    coordinator._on_zone_enter(enter)
-    await hass.async_block_till_done()
-
-    assert coordinator.sonstiges_minutes == 0
-    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
-
-
 async def test_other_appointment_discarded_next_day(
     hass: HomeAssistant, calendar_config
 ):
-    """Reported bug: leave Monday, return ~20h later with max 14h -> discarded."""
-    calendar_config[CONF_SONSTIGES_MAX_HOURS] = 14
-    _set_calendar(hass, True, "Feuerwehr-Termin")
+    """Reported bug: leave Monday, return next day → beyond grace, discarded.
+
+    The old sonstiges_max cap is gone; the grace window is the sole guard now.
+    """
+    _set_calendar_end(hass, True, "Feuerwehr-Termin", end_time="2026-07-13 22:00:00")
     hass.states.async_set(calendar_config[CONF_ALARM], "off")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
 
-    leave = datetime(2026, 7, 13, 20, 0)  # Monday evening
-    enter = datetime(2026, 7, 14, 16, 0)  # next day, 20h later
-    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await coordinator._on_zone_leave(_loc(2026, 7, 13, 20, 0), calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(enter)
+    _set_calendar_end(hass, False, "")  # appointment long over
+    await coordinator._on_zone_enter(_loc(2026, 7, 14, 16, 0))  # next day, way past grace
     await hass.async_block_till_done()
 
     assert coordinator.sonstiges_minutes == 0
     assert coordinator._data[DATA_SONSTIGES_STARTED] is None
 
 
-async def test_other_appointment_just_under_max_counts(
+async def test_other_appointment_long_but_still_active_counts(
     hass: HomeAssistant, calendar_config
 ):
-    """Boundary: an absence just under the max is still counted in full."""
-    calendar_config[CONF_SONSTIGES_MAX_HOURS] = 14
-    _set_calendar(hass, True, "Langer Lehrgang")
+    """No upper cap any more: a long appointment still active on return counts fully."""
+    _set_calendar(hass, True, "Langer Lehrgang")  # stays active on return
     hass.states.async_set(calendar_config[CONF_ALARM], "off")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
 
-    leave = datetime(2026, 7, 13, 8, 0)
-    enter = datetime(2026, 7, 13, 21, 30)  # 13.5h absence, max 14h -> counts
-    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    leave = _loc(2026, 7, 13, 8, 0)
+    enter = _loc(2026, 7, 13, 21, 30)  # 13.5h, still active → counts in full
+    await coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(enter)
+    await coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
     assert coordinator.sonstiges_minutes == 810  # 13.5h * 60
@@ -590,12 +572,207 @@ async def test_other_appointment_counts_overnight(
 
     leave = datetime(2026, 7, 8, 23, 0)
     enter = datetime(2026, 7, 9, 1, 0)  # 2h absence across midnight, cap 6h
-    coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(enter)
+    await coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
     assert coordinator.sonstiges_minutes == 120
+
+
+# ----------------------------------------------------------------------
+# Fix 1: grace window after the appointment's end
+# ----------------------------------------------------------------------
+
+def _loc(y, mo, d, h, mi):
+    """Build a tz-aware datetime in HA's configured timezone."""
+    return datetime(y, mo, d, h, mi, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+
+def _set_calendar_end(
+    hass: HomeAssistant, on: bool, summary: str = "", end_time: str | None = None
+) -> None:
+    attrs: dict = {"message": summary}
+    if end_time is not None:
+        attrs["end_time"] = end_time
+    hass.states.async_set(CALENDAR_ENTITY, "on" if on else "off", attrs)
+
+
+async def test_sonstiges_end_captured_on_leave(hass: HomeAssistant, calendar_config):
+    """Leaving during an appointment records its end (from the end_time attr)."""
+    _set_calendar_end(hass, True, "Vorstandssitzung", end_time="2026-07-08 20:00:00")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    await coordinator._on_zone_leave(_loc(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is not None
+    assert coordinator._data[DATA_SONSTIGES_END] == pytest.approx(
+        _loc(2026, 7, 8, 20, 0).timestamp()
+    )
+
+
+async def test_sonstiges_counts_within_grace(hass: HomeAssistant, calendar_config):
+    """Return after the appointment ended but within the grace window → counts."""
+    calendar_config[CONF_SONSTIGES_GRACE_HOURS] = 1
+    _set_calendar_end(hass, True, "Vorstandssitzung", end_time="2026-07-08 20:00:00")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    await coordinator._on_zone_leave(_loc(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+
+    # Appointment is over now (calendar off), return 0.5h after its end (grace 1h).
+    _set_calendar_end(hass, False, "")
+    await coordinator._on_zone_enter(_loc(2026, 7, 8, 20, 30))
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 150  # 18:00 -> 20:30
+    assert coordinator._data[DATA_SONSTIGES_END] is None
+
+
+async def test_sonstiges_discarded_after_grace(hass: HomeAssistant, calendar_config):
+    """Return long after the appointment ended (beyond grace) → fully discarded."""
+    calendar_config[CONF_SONSTIGES_GRACE_HOURS] = 1
+    _set_calendar_end(hass, True, "Vorstandssitzung", end_time="2026-07-08 20:00:00")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    await coordinator._on_zone_leave(_loc(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+
+    # Ended 2h ago, grace only 1h → grace discards it.
+    _set_calendar_end(hass, False, "")
+    await coordinator._on_zone_enter(_loc(2026, 7, 8, 22, 0))
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 0
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+    assert coordinator._data[DATA_SONSTIGES_END] is None
+
+
+async def test_sonstiges_grace_zero_requires_active_on_return(
+    hass: HomeAssistant, calendar_config
+):
+    """grace=0: still active on return counts; ended (even briefly) → discarded."""
+    calendar_config[CONF_SONSTIGES_GRACE_HOURS] = 0
+
+    # Case A: still active on return → counts.
+    _set_calendar_end(hass, True, "Vorstandssitzung", end_time="2026-07-08 23:00:00")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    coord_a = FeuerwehrCoordinator(hass, "entry_a", calendar_config)
+    await coord_a._on_zone_leave(_loc(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    await coord_a._on_zone_enter(_loc(2026, 7, 8, 19, 0))  # calendar still on
+    await hass.async_block_till_done()
+    assert coord_a.sonstiges_minutes == 60
+
+    # Case B: appointment ended 5 min before return, grace 0 → discarded.
+    _set_calendar_end(hass, True, "Vorstandssitzung", end_time="2026-07-08 20:00:00")
+    coord_b = FeuerwehrCoordinator(hass, "entry_b", calendar_config)
+    await coord_b._on_zone_leave(_loc(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    _set_calendar_end(hass, False, "")
+    await coord_b._on_zone_enter(_loc(2026, 7, 8, 20, 5))
+    await hass.async_block_till_done()
+    assert coord_b.sonstiges_minutes == 0
+
+
+# ----------------------------------------------------------------------
+# Fix 2: ignore all-day events (calendar.get_events path)
+# ----------------------------------------------------------------------
+
+def _register_get_events(hass: HomeAssistant, events_box: dict) -> dict:
+    """Register a mock calendar.get_events returning events_box['events'].
+
+    Returns a call-counter dict so tests can assert whether it was invoked.
+    """
+    counter = {"calls": 0}
+
+    async def _handler(call):
+        counter["calls"] += 1
+        return {CALENDAR_ENTITY: {"events": events_box["events"]}}
+
+    hass.services.async_register(
+        "calendar", "get_events", _handler, supports_response=SupportsResponse.ONLY
+    )
+    return counter
+
+
+async def test_ignore_allday_detects_timed_event(hass: HomeAssistant, calendar_config):
+    """all-day events are ignored, but a timed event underneath is still tracked."""
+    calendar_config[CONF_IGNORE_ALLDAY] = True
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    events_box = {
+        "events": [
+            # All-day event (date-only) → must be ignored.
+            {"start": "2026-07-08", "end": "2026-07-09", "summary": "Urlaub"},
+            # Timed non-keyword event → the Sonstiges appointment.
+            {
+                "start": "2026-07-08T17:00:00+00:00",
+                "end": "2026-07-08T20:00:00+00:00",
+                "summary": "Vorstandssitzung",
+            },
+        ]
+    }
+    _register_get_events(hass, events_box)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    leave = datetime(2026, 7, 8, 18, 0, tzinfo=timezone.utc)
+    await coordinator._on_zone_leave(leave, calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is not None
+    assert coordinator._data[DATA_SONSTIGES_END] == pytest.approx(
+        datetime(2026, 7, 8, 20, 0, tzinfo=timezone.utc).timestamp()
+    )
+
+    # Event ends; bypass the ~60s memo and return within grace (default 1h).
+    events_box["events"] = []
+    coordinator._cal_cache = None
+    await coordinator._on_zone_enter(datetime(2026, 7, 8, 20, 30, tzinfo=timezone.utc))
+    await hass.async_block_till_done()
+
+    assert coordinator.sonstiges_minutes == 150  # 18:00 -> 20:30
+
+
+async def test_ignore_allday_pure_allday_not_tracked(
+    hass: HomeAssistant, calendar_config
+):
+    """Only an all-day event present + ignore option on → nothing is tracked."""
+    calendar_config[CONF_IGNORE_ALLDAY] = True
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    events_box = {
+        "events": [
+            {"start": "2026-07-08", "end": "2026-07-09", "summary": "Betriebsausflug"}
+        ]
+    }
+    _register_get_events(hass, events_box)
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    await coordinator._on_zone_leave(
+        datetime(2026, 7, 8, 18, 0, tzinfo=timezone.utc), calendar_config[CONF_ALARM]
+    )
+    await hass.async_block_till_done()
+
+    assert coordinator._data[DATA_SONSTIGES_STARTED] is None
+
+
+async def test_ignore_allday_off_uses_state_path(hass: HomeAssistant, calendar_config):
+    """With the option off, get_events is not called (cheap state-attr path)."""
+    calendar_config[CONF_IGNORE_ALLDAY] = False
+    _set_calendar_end(hass, True, "Vorstandssitzung", end_time="2026-07-08 20:00:00")
+    hass.states.async_set(calendar_config[CONF_ALARM], "off")
+    counter = _register_get_events(hass, {"events": []})
+    coordinator = FeuerwehrCoordinator(hass, "test_entry", calendar_config)
+
+    await coordinator._on_zone_leave(_loc(2026, 7, 8, 18, 0), calendar_config[CONF_ALARM])
+    await hass.async_block_till_done()
+    await coordinator._on_zone_enter(_loc(2026, 7, 8, 19, 0))
+    await hass.async_block_till_done()
+
+    assert counter["calls"] == 0
+    assert coordinator.sonstiges_minutes == 60
 
 
 async def test_probe_absence_discarded_when_over_max(hass: HomeAssistant, base_config):
@@ -607,11 +784,11 @@ async def test_probe_absence_discarded_when_over_max(hass: HomeAssistant, base_c
     # Tuesday, both timestamps inside the probe window (17:00-23:59), same day.
     leave = datetime(2026, 7, 7, 17, 30)
     enter = datetime(2026, 7, 7, 22, 0)  # 4.5h absence, max 2h -> discarded
-    coordinator._on_zone_leave(leave, base_config[CONF_ALARM])
+    await coordinator._on_zone_leave(leave, base_config[CONF_ALARM])
     await hass.async_block_till_done()
     assert coordinator._data[DATA_PROBE_STARTED] is not None
 
-    coordinator._on_zone_enter(enter)
+    await coordinator._on_zone_enter(enter)
     await hass.async_block_till_done()
 
     assert coordinator.probe_minutes == 0
@@ -643,7 +820,7 @@ async def test_einsatz_discarded_when_alarm_off_between_alarms(
 
     # Alarm #1 active, member leaves the zone -> einsatz_started is set.
     hass.states.async_set(base_config[CONF_ALARM], "on")
-    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
     await hass.async_block_till_done()
     assert coordinator._data[DATA_EINSATZ_STARTED] is not None
 
@@ -654,7 +831,7 @@ async def test_einsatz_discarded_when_alarm_off_between_alarms(
 
     # Alarm #2 (~3h later), member returns to the station.
     hass.states.async_set(base_config[CONF_ALARM], "on")
-    coordinator._on_zone_enter(datetime(2026, 7, 7, 20, 0))
+    await coordinator._on_zone_enter(datetime(2026, 7, 7, 20, 0))
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 0
@@ -667,10 +844,10 @@ async def test_einsatz_counted_when_alarm_stays_on(hass: HomeAssistant, base_con
     # Alarm active, member departs (leaves zone) and returns 2h later while the
     # alarm is still on – no alarm-off event in between.
     hass.states.async_set(base_config[CONF_ALARM], "on")
-    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
     await hass.async_block_till_done()
 
-    coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
+    await coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 120
@@ -869,9 +1046,9 @@ async def test_einsatz_notification_undo_end_to_end(
     coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
 
     hass.states.async_set(notify_config[CONF_ALARM], "on")
-    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), notify_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), notify_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))  # 2h absence
+    await coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))  # 2h absence
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 120

@@ -23,7 +23,8 @@ from .const import (
     CONF_EINSATZ_MAX_HOURS,
     CONF_PROBE_MAX_HOURS,
     CONF_TRACK_OTHER_ABSENCE,
-    CONF_SONSTIGES_MAX_HOURS,
+    CONF_SONSTIGES_GRACE_HOURS,
+    CONF_IGNORE_ALLDAY,
     CONF_NOTIFY_SERVICE,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
@@ -148,7 +149,8 @@ class FeuerwehrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_PROBE_CALENDAR, default=calendars[0] if calendars else ""): vol.In(calendars) if calendars else str,
             vol.Required(CONF_PROBE_KEYWORDS, default=""): str,
             vol.Required(CONF_TRACK_OTHER_ABSENCE, default=False): bool,
-            vol.Required(CONF_SONSTIGES_MAX_HOURS, default=6): vol.All(int, vol.Range(min=1, max=24)),
+            vol.Required(CONF_SONSTIGES_GRACE_HOURS, default=1): vol.All(int, vol.Range(min=0, max=12)),
+            vol.Required(CONF_IGNORE_ALLDAY, default=False): bool,
         })
 
         return self.async_show_form(
@@ -192,7 +194,8 @@ class FeuerwehrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_PROBE_CALENDAR, default=calendars[0] if calendars else ""): vol.In(calendars) if calendars else str,
             vol.Required(CONF_PROBE_KEYWORDS, default=""): str,
             vol.Required(CONF_TRACK_OTHER_ABSENCE, default=False): bool,
-            vol.Required(CONF_SONSTIGES_MAX_HOURS, default=6): vol.All(int, vol.Range(min=1, max=24)),
+            vol.Required(CONF_SONSTIGES_GRACE_HOURS, default=1): vol.All(int, vol.Range(min=0, max=12)),
+            vol.Required(CONF_IGNORE_ALLDAY, default=False): bool,
         })
 
         return self.async_show_form(
@@ -286,7 +289,8 @@ class FeuerwehrOptionsFlow(config_entries.OptionsFlow):
             vol.Required(CONF_PROBE_CALENDAR, default=current.get(CONF_PROBE_CALENDAR, calendars[0] if calendars else "")): vol.In(calendars) if calendars else str,
             vol.Required(CONF_PROBE_KEYWORDS, default=current.get(CONF_PROBE_KEYWORDS, "")): str,
             vol.Required(CONF_TRACK_OTHER_ABSENCE, default=current.get(CONF_TRACK_OTHER_ABSENCE, False)): bool,
-            vol.Required(CONF_SONSTIGES_MAX_HOURS, default=current.get(CONF_SONSTIGES_MAX_HOURS, 6)): vol.All(int, vol.Range(min=1, max=24)),
+            vol.Required(CONF_SONSTIGES_GRACE_HOURS, default=current.get(CONF_SONSTIGES_GRACE_HOURS, 1)): vol.All(int, vol.Range(min=0, max=12)),
+            vol.Required(CONF_IGNORE_ALLDAY, default=current.get(CONF_IGNORE_ALLDAY, False)): bool,
         }
 
     async def async_step_options_day_time(self, user_input=None):

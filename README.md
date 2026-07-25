@@ -70,12 +70,24 @@ Sonstiges erfasst, wenn der Termin **keine** Übung ist:
   – dieselbe Logik wie bei Einsatz/Probe.
 - **Wichtig:** Ein aktiver Kalender-Termin ist zwingende Voraussetzung. Verlässt du
   die Zone ohne passenden Termin, wird **nichts** gezählt.
-- Der Regler **„Max. Dauer für Sonstige Termine"** ist eine Gültigkeitsgrenze:
-  Ist die Abwesenheit **länger** als dieser Wert, wird sie **verworfen** (nicht auf
-  das Maximum gekappt) – so werden „über Nacht daheim"-Lücken nicht als Stunden
-  gutgeschrieben. Anders als bei Proben gibt es hier **keinen** Tagesgrenzen-Schutz
-  – ein Termin darf über Mitternacht laufen.
-- Ist der Schalter aus, bleibt alles wie bisher (nur Übungen werden getrackt).
+- **Nachlauf nach Termin-Ende** (Regler **„Nachlauf nach Termin-Ende"**): Der Termin
+  muss beim Verlassen aktiv sein **und** bei der Rückkehr entweder noch laufen **oder**
+  erst seit höchstens den eingestellten Stunden vorbei sein. Beispiel bei 2 h: Rückkehr
+  während des Termins → zählt; Termin seit 1,5 h vorbei → zählt; Termin seit 3 h vorbei
+  → die Abwesenheit wird **komplett verworfen**. Bei 0 h muss der Termin bei der
+  Rückkehr noch aktiv sein. Dieses Nachlauf-Fenster ist die einzige Gültigkeitsgrenze
+  (der frühere Regler „Max. Dauer für Sonstige Termine" wurde dadurch ersetzt): Kommt
+  man erst lange nach Termin-Ende zurück, greift automatisch das Verwerfen – ein „über
+  Nacht daheim"-Fall wird so nie als Stunden gutgeschrieben. Ein Termin darf über
+  Mitternacht laufen (kein Tagesgrenzen-Schutz).
+- **Ganztägige Termine ignorieren** (Schalter, gilt für den **gesamten** Kalender):
+  Ganztägige Kalendereinträge (z. B. „Urlaub", Feiertage) werden dann weder als Probe
+  noch als Sonstiges gezählt. Ein **kurzer** Termin, der währenddessen läuft, wird
+  trotzdem erkannt – dafür fragt die Integration die Kalender-Ereignisse direkt über
+  `calendar.get_events` ab (die Kalender-Attribute zeigen bei mehreren gleichzeitigen
+  Terminen sonst nur den ganztägigen). Kompatibel mit allen gängigen Kalender-
+  Integrationen (Google, CalDAV, Local, …); ist der Schalter aus, ändert sich nichts.
+- Ist der Sonstiges-Schalter aus, bleibt alles wie bisher (nur Übungen werden getrackt).
 
 ### 📊 Gesamt
 
@@ -189,7 +201,8 @@ ___
 | Kalender-Entität | Die zu überwachende Kalender-Entität | `calendar.feuerwehr` |
 | Schlagwörter für Proben | Kommagetrennte Begriffe, die im Event-Titel vorkommen müssen | `Probe,Übung,Training` |
 | Alle weiteren Kalendereinträge als „Sonstige" Zeit erkennen | Termine ohne Schlagwort außerhalb des Gerätehauses als Sonstiges erfassen | `aus` |
-| Max. Dauer für Sonstige Termine | Gültigkeitsgrenze der Abwesenheit (darüber wird verworfen, nicht gekappt) | `6` |
+| Nachlauf nach Termin-Ende | Bis wie lange nach Termin-Ende eine Rückkehr noch zählt (Stunden; 0 = muss bei Rückkehr noch aktiv sein) | `1` |
+| Ganztägige Termine ignorieren | Ganztägige Einträge nicht werten; kurze Termine währenddessen werden trotzdem erkannt | `aus` |
 
 ### Schritt 4 – Einsatz & Benachrichtigungen
 | Feld | Beschreibung | Standard |

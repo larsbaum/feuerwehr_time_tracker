@@ -118,9 +118,9 @@ async def test_alarm_counted_as_responded_when_departed(
     hass.states.async_set(base_config[CONF_ALARM], "on")
 
     # Leave zone during the alarm and return 2h later while still on.
-    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
+    await coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_minutes == 120
@@ -146,7 +146,7 @@ async def test_alarm_counted_as_standby_via_flag(hass: HomeAssistant, base_confi
     hass.states.async_set(base_config[CONF_ALARM], "on")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
 
-    coordinator._handle_minute_tick(None)  # in zone + alarm on -> at_station flag
+    await coordinator._handle_minute_tick(None)  # in zone + alarm on -> at_station flag
     await hass.async_block_till_done()
     assert coordinator._data[DATA_ALARM_AT_STATION] is True
 
@@ -185,7 +185,7 @@ async def test_unavailable_dropout_does_not_double_count(
     hass.states.async_set(base_config[CONF_ALARM], "on")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", base_config)
 
-    coordinator._handle_minute_tick(None)  # at_station flag
+    await coordinator._handle_minute_tick(None)  # at_station flag
     await hass.async_block_till_done()
 
     # Sensor briefly drops out mid-mission – must NOT count or reset flags.
@@ -216,9 +216,9 @@ async def test_flags_reset_between_two_alarms(hass: HomeAssistant, base_config):
     hass.states.async_set(base_config[CONF_ALARM], "on")
 
     # Alarm #1: departed -> Abgerückt.
-    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), base_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
+    await coordinator._on_zone_enter(datetime(2026, 7, 7, 19, 0))
     await hass.async_block_till_done()
     coordinator._handle_alarm_state_change(_alarm_event(base_config, "on", "off"))
     await hass.async_block_till_done()
@@ -233,7 +233,7 @@ async def test_flags_reset_between_two_alarms(hass: HomeAssistant, base_config):
     # Alarm #2: only standby this time.
     _set_person_in_zone(hass, base_config)
     hass.states.async_set(base_config[CONF_ALARM], "on")
-    coordinator._handle_minute_tick(None)
+    await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
     hass.states.async_set(base_config[CONF_PERSON], "not_home")
     coordinator._handle_alarm_state_change(_alarm_event(base_config, "on", "off"))
@@ -299,7 +299,7 @@ async def test_year_rollover_archives_and_resets_counts(
         "custom_components.feuerwehr_time_tracker.coordinator.dt_util.now",
         return_value=new_year,
     ):
-        coordinator._handle_minute_tick(None)
+        await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
 
     assert coordinator.einsatz_count_total == 0
@@ -326,7 +326,7 @@ async def test_finalize_notify_attaches_reclassify_and_delete_buttons(
     hass.states.async_set(notify_config[CONF_ALARM], "on")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
 
-    coordinator._handle_minute_tick(None)  # at_station -> standby classification
+    await coordinator._handle_minute_tick(None)  # at_station -> standby classification
     await hass.async_block_till_done()
     coordinator._handle_alarm_state_change(_alarm_event(notify_config, "on", "off"))
     await hass.async_block_till_done()
@@ -383,7 +383,7 @@ async def test_count_notification_undo_end_to_end(hass: HomeAssistant, notify_co
     hass.states.async_set(notify_config[CONF_ALARM], "on")
     coordinator = FeuerwehrCoordinator(hass, "test_entry", notify_config)
 
-    coordinator._handle_minute_tick(None)
+    await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
     coordinator._handle_alarm_state_change(_alarm_event(notify_config, "on", "off"))
     await hass.async_block_till_done()
@@ -410,15 +410,15 @@ async def test_undo_einsatz_time_reclassifies_alarm_as_standby(
     hass.states.async_set(notify_config[CONF_ALARM], "on")
 
     # At the station during the alarm (Bereitschaft) → at_station flag.
-    coordinator._handle_minute_tick(None)
+    await coordinator._handle_minute_tick(None)
     await hass.async_block_till_done()
     assert coordinator._data[DATA_ALARM_AT_STATION] is True
 
     # Leave and return while the alarm is still on → Einsatz minutes added,
     # alarm_responded set, an undo record created.
-    coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), notify_config[CONF_ALARM])
+    await coordinator._on_zone_leave(datetime(2026, 7, 7, 17, 0), notify_config[CONF_ALARM])
     await hass.async_block_till_done()
-    coordinator._on_zone_enter(datetime(2026, 7, 7, 17, 30))
+    await coordinator._on_zone_enter(datetime(2026, 7, 7, 17, 30))
     await hass.async_block_till_done()
     assert coordinator._data[DATA_ALARM_RESPONDED] is True
     token = next(iter(coordinator._data[DATA_PENDING_UNDOS]))

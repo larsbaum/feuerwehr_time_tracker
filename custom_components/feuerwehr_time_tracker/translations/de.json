@@ -35,7 +35,8 @@
           "probe_calendar_entity": "Kalender-Entität",
           "probe_keywords": "Schlagwörter für Proben (kommagetrennt, z.B. Probe,Übung,Training)",
           "track_other_absence": "Alle weiteren Kalendereinträge als \"Sonstige\" Zeit erkennen",
-          "sonstiges_max_hours": "Max. Sonstige-Termin-Dauer (Stunden)"
+          "sonstiges_grace_hours": "Nachlauf nach Termin-Ende (Stunden) – bis wie lange nach Termin-Ende eine Rückkehr noch zählt (0 = muss bei Rückkehr noch aktiv sein)",
+          "ignore_allday_events": "Ganztägige Termine ignorieren (kurze Termine, die währenddessen laufen, werden trotzdem erkannt)"
         }
       },
       "probe_both_day_time": {
@@ -56,7 +57,8 @@
           "probe_calendar_entity": "Kalender-Entität",
           "probe_keywords": "Schlagwörter für Proben (kommagetrennt, z.B. Probe,Übung,Training)",
           "track_other_absence": "Alle weiteren Kalendereinträge als \"Sonstige\" Zeit erkennen",
-          "sonstiges_max_hours": "Max. Sonstige-Termin-Dauer (Stunden)"
+          "sonstiges_grace_hours": "Nachlauf nach Termin-Ende (Stunden) – bis wie lange nach Termin-Ende eine Rückkehr noch zählt (0 = muss bei Rückkehr noch aktiv sein)",
+          "ignore_allday_events": "Ganztägige Termine ignorieren (kurze Termine, die währenddessen laufen, werden trotzdem erkannt)"
         }
       },
       "einsatz": {
@@ -112,7 +114,8 @@
           "probe_calendar_entity": "Kalender-Entität",
           "probe_keywords": "Schlagwörter für Proben (kommagetrennt)",
           "track_other_absence": "Alle weiteren Kalendereinträge als \"Sonstige\" Zeit erkennen",
-          "sonstiges_max_hours": "Max. Dauer für Sonstige Termine (Stunden)",
+          "sonstiges_grace_hours": "Nachlauf nach Termin-Ende (Stunden) – bis wie lange nach Termin-Ende eine Rückkehr noch zählt (0 = muss bei Rückkehr noch aktiv sein)",
+          "ignore_allday_events": "Ganztägige Termine ignorieren (kurze Termine, die währenddessen laufen, werden trotzdem erkannt)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "probe_max_hours": "Max. Probedauer (Stunden)",
           "notify_service": "Notify Service (optional)"
@@ -132,7 +135,8 @@
           "probe_calendar_entity": "Kalender-Entität",
           "probe_keywords": "Schlagwörter für Proben (kommagetrennt)",
           "track_other_absence": "Alle weiteren Kalendereinträge als \"Sonstige\" Zeit erkennen",
-          "sonstiges_max_hours": "Max. Dauer für Sonstige Termine (Stunden)",
+          "sonstiges_grace_hours": "Nachlauf nach Termin-Ende (Stunden) – bis wie lange nach Termin-Ende eine Rückkehr noch zählt (0 = muss bei Rückkehr noch aktiv sein)",
+          "ignore_allday_events": "Ganztägige Termine ignorieren (kurze Termine, die währenddessen laufen, werden trotzdem erkannt)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "probe_max_hours": "Max. Probedauer (Stunden)",
           "notify_service": "Notify Service (optional)"

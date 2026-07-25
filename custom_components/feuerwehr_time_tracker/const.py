@@ -26,7 +26,12 @@ CONF_PROBE_KEYWORDS = "probe_keywords"
 CONF_EINSATZ_MAX_HOURS = "einsatz_max_hours"
 CONF_PROBE_MAX_HOURS = "probe_max_hours"
 CONF_TRACK_OTHER_ABSENCE = "track_other_absence"
-CONF_SONSTIGES_MAX_HOURS = "sonstiges_max_hours"
+# Grace window (hours) after a "Sonstiges" appointment's end during which a
+# return to the zone still counts it (0 = must still be active on return).
+CONF_SONSTIGES_GRACE_HOURS = "sonstiges_grace_hours"
+# Ignore all-day calendar events entirely (uses calendar.get_events so timed
+# events running underneath an all-day event are still detected).
+CONF_IGNORE_ALLDAY = "ignore_allday_events"
 CONF_NOTIFY_SERVICE = "notify_service"
 
 # Probe mode choices
@@ -45,6 +50,7 @@ DATA_SONSTIGES_MINUTES = "sonstiges_minutes"
 DATA_EINSATZ_STARTED = "einsatz_started"   # timestamp float or None
 DATA_PROBE_STARTED = "probe_started"       # timestamp float or None
 DATA_SONSTIGES_STARTED = "sonstiges_started"  # timestamp float or None
+DATA_SONSTIGES_END = "sonstiges_end"       # timestamp float or None (appointment end)
 DATA_CURRENT_YEAR = "current_year"         # int or None (year the counters belong to)
 DATA_PREVIOUS_YEARS = "previous_years"     # dict[str, dict[str, int]] archived totals
 DATA_PENDING_UNDOS = "pending_undos"       # dict[token, {category, minutes, created}]

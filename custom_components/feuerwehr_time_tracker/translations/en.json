@@ -35,7 +35,8 @@
           "probe_calendar_entity": "Calendar Entity",
           "probe_keywords": "Training keywords (comma-separated, e.g. Training,Exercise,Drill)",
           "track_other_absence": "Recognize all other calendar entries as \"other\" time",
-          "sonstiges_max_hours": "Max. other-appointment duration (hours)"
+          "sonstiges_grace_hours": "Grace period after appointment end (hours) – how long after the appointment ends a return still counts (0 = must still be active on return)",
+          "ignore_allday_events": "Ignore all-day events (short events running during them are still detected)"
         }
       },
       "probe_both_day_time": {
@@ -56,7 +57,8 @@
           "probe_calendar_entity": "Calendar Entity",
           "probe_keywords": "Training keywords (comma-separated, e.g. Training,Exercise,Drill)",
           "track_other_absence": "Recognize all other calendar entries as \"other\" time",
-          "sonstiges_max_hours": "Max. other-appointment duration (hours)"
+          "sonstiges_grace_hours": "Grace period after appointment end (hours) – how long after the appointment ends a return still counts (0 = must still be active on return)",
+          "ignore_allday_events": "Ignore all-day events (short events running during them are still detected)"
         }
       },
       "einsatz": {
@@ -112,7 +114,8 @@
           "probe_calendar_entity": "Calendar Entity",
           "probe_keywords": "Training keywords (comma-separated)",
           "track_other_absence": "Recognize all other calendar entries as \"other\" time",
-          "sonstiges_max_hours": "Max. duration for other appointments (hours)",
+          "sonstiges_grace_hours": "Grace period after appointment end (hours) – how long after the appointment ends a return still counts (0 = must still be active on return)",
+          "ignore_allday_events": "Ignore all-day events (short events running during them are still detected)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"
@@ -132,7 +135,8 @@
           "probe_calendar_entity": "Calendar Entity",
           "probe_keywords": "Training keywords (comma-separated)",
           "track_other_absence": "Recognize all other calendar entries as \"other\" time",
-          "sonstiges_max_hours": "Max. duration for other appointments (hours)",
+          "sonstiges_grace_hours": "Grace period after appointment end (hours) – how long after the appointment ends a return still counts (0 = must still be active on return)",
+          "ignore_allday_events": "Ignore all-day events (short events running during them are still detected)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
           "notify_service": "Notify service (optional)"

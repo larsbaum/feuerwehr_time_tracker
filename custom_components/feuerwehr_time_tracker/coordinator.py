@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta, time as dtime
 from typing import Any
 
@@ -33,7 +34,8 @@ from .const import (
     CONF_EINSATZ_MAX_HOURS,
     CONF_PROBE_MAX_HOURS,
     CONF_TRACK_OTHER_ABSENCE,
-    CONF_SONSTIGES_MAX_HOURS,
+    CONF_SONSTIGES_GRACE_HOURS,
+    CONF_IGNORE_ALLDAY,
     CONF_NOTIFY_SERVICE,
     DATA_EINSATZ_MINUTES,
     DATA_PROBE_MINUTES,
@@ -41,6 +43,7 @@ from .const import (
     DATA_EINSATZ_STARTED,
     DATA_PROBE_STARTED,
     DATA_SONSTIGES_STARTED,
+    DATA_SONSTIGES_END,
     DATA_CURRENT_YEAR,
     DATA_PREVIOUS_YEARS,
     DATA_PENDING_UNDOS,
@@ -129,6 +132,7 @@ class FeuerwehrCoordinator:
             DATA_EINSATZ_STARTED: None,
             DATA_PROBE_STARTED: None,
             DATA_SONSTIGES_STARTED: None,
+            DATA_SONSTIGES_END: None,
             DATA_CURRENT_YEAR: None,
             DATA_PREVIOUS_YEARS: {},
             DATA_PENDING_UNDOS: {},
@@ -144,6 +148,9 @@ class FeuerwehrCoordinator:
         self._unsub_alarm = None
         self._listeners: list[callback] = []
         self._rollover_in_progress = False
+        # Short-lived cache for calendar.get_events results (monotonic ts, events).
+        self._cal_cache: list[dict[str, Any]] | None = None
+        self._cal_cache_ts = 0.0
 
     # ------------------------------------------------------------------
     # Public properties
@@ -200,64 +207,170 @@ class FeuerwehrCoordinator:
         return zone_entity_id.replace("zone.", "")
 
     # ------------------------------------------------------------------
-    # Calendar-based probe check
+    # Calendar reading (async – supports calendar.get_events)
     # ------------------------------------------------------------------
 
-    def _is_probe_calendar_active(self) -> bool:
-        """Check if a matching calendar event is currently active."""
-        cal_entity = self.get_cfg(CONF_PROBE_CALENDAR, "")
-        if not cal_entity:
-            return False
+    @staticmethod
+    def _parse_calendar_dt(value: Any) -> float | None:
+        """Parse a calendar datetime to a POSIX timestamp, or None.
 
+        Handles both the entity ``end_time`` attribute ("YYYY-MM-DD HH:MM:SS",
+        local wall time) and the ISO strings returned by ``calendar.get_events``
+        (with tz offset). Date-only (all-day) values become local midnight.
+        """
+        if not value:
+            return None
+        text = str(value)
+        dt = dt_util.parse_datetime(text)
+        if dt is None:
+            d = dt_util.parse_date(text)
+            if d is None:
+                return None
+            dt = datetime(d.year, d.month, d.day)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return dt.timestamp()
+
+    def _active_events_from_state(self, cal_entity: str) -> list[dict[str, Any]]:
+        """Cheap path: derive the single active event from the entity state.
+
+        Used when all-day events are NOT ignored (unchanged legacy behaviour):
+        the calendar entity exposes only one current event via its attributes.
+        """
         cal_state = self.hass.states.get(cal_entity)
         if not cal_state or cal_state.state != "on":
-            return False
+            return []
+        attrs = cal_state.attributes
+        return [
+            {
+                "summary": (attrs.get("message") or ""),
+                "all_day": bool(attrs.get("all_day")),
+                "end_ts": self._parse_calendar_dt(attrs.get("end_time")),
+            }
+        ]
 
-        # Check keywords against the event summary/message
+    async def _async_get_events_via_service(
+        self, cal_entity: str, now: datetime
+    ) -> list[dict[str, Any]]:
+        """Query calendar.get_events for events active now, all-day filtered.
+
+        Falls back to the state-attribute path if the service raises (e.g. a
+        calendar entity that does not implement get_events).
+        """
+        try:
+            result = await self.hass.services.async_call(
+                "calendar",
+                "get_events",
+                {
+                    "entity_id": cal_entity,
+                    "start_date_time": now.isoformat(),
+                    "end_date_time": (now + timedelta(minutes=1)).isoformat(),
+                },
+                blocking=True,
+                return_response=True,
+            )
+        except Exception as err:  # noqa: BLE001 – degrade gracefully, never crash
+            _LOGGER.warning(
+                "calendar.get_events failed for %s (%s) – falling back to state attributes",
+                cal_entity,
+                err,
+            )
+            return self._active_events_from_state(cal_entity)
+
+        entity_result = (result or {}).get(cal_entity, {})
+        raw_events = (
+            entity_result.get("events", []) if isinstance(entity_result, dict) else []
+        )
+        out: list[dict[str, Any]] = []
+        for ev in raw_events:
+            start_raw = str(ev.get("start", ""))
+            # All-day events serialise start/end as date-only strings ("2026-07-25").
+            if "T" not in start_raw:
+                continue
+            out.append(
+                {
+                    "summary": (ev.get("summary") or ""),
+                    "all_day": False,
+                    "end_ts": self._parse_calendar_dt(ev.get("end")),
+                }
+            )
+        return out
+
+    async def _async_active_calendar_events(self, now: datetime) -> list[dict[str, Any]]:
+        """Return currently-active calendar events for the configured calendar.
+
+        Each item: ``{"summary": str, "all_day": bool, "end_ts": float | None}``.
+
+        With ``ignore_allday_events`` OFF this uses the cheap state-attribute path
+        (single current event) – no service call, unchanged behaviour. With it ON
+        it calls ``calendar.get_events`` (memoised ~60s) so timed events running
+        underneath an all-day event stay visible, and drops the all-day events.
+        """
+        cal_entity = self.get_cfg(CONF_PROBE_CALENDAR, "")
+        if not cal_entity:
+            return []
+
+        if not self.get_cfg(CONF_IGNORE_ALLDAY, False):
+            return self._active_events_from_state(cal_entity)
+
+        mono = time.monotonic()
+        if self._cal_cache is not None and (mono - self._cal_cache_ts) < 55:
+            return self._cal_cache
+
+        events = await self._async_get_events_via_service(cal_entity, now)
+        self._cal_cache = events
+        self._cal_cache_ts = mono
+        return events
+
+    # ------------------------------------------------------------------
+    # Calendar deciders (pure, from a pre-fetched events list)
+    # ------------------------------------------------------------------
+
+    def _configured_keywords(self) -> list[str]:
         keywords_raw = self.get_cfg(CONF_PROBE_KEYWORDS, "")
-        if not keywords_raw:
-            # No keywords configured → any active event counts
-            return True
+        return [kw.strip().lower() for kw in keywords_raw.split(",") if kw.strip()]
 
-        keywords = [kw.strip().lower() for kw in keywords_raw.split(",") if kw.strip()]
+    def _matches_probe_keyword(self, summary: str, keywords: list[str]) -> bool:
+        s = summary.lower()
+        return any(kw in s for kw in keywords)
+
+    def _probe_calendar_active_from(self, events: list[dict[str, Any]]) -> bool:
+        """Whether a matching calendar event (probe) is active, from the list."""
+        if not events:
+            return False
+        keywords = self._configured_keywords()
         if not keywords:
+            # No keywords configured → any active event counts as probe.
             return True
+        return any(self._matches_probe_keyword(ev["summary"], keywords) for ev in events)
 
-        # Calendar entities expose the current event title as 'message' attribute
-        event_summary = (cal_state.attributes.get("message") or "").lower()
+    def _get_other_appointment_from(
+        self, events: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """Return the active non-training appointment (Sonstiges), or None.
 
-        return any(kw in event_summary for kw in keywords)
-
-    def _is_other_appointment_active(self) -> bool:
-        """Check if a non-training calendar event is currently active.
-
-        Used to track appointments outside the fire station that are NOT
-        exercises (e.g. meetings, courses) as "Sonstiges" absence – only when
-        the toggle is enabled.  A configured calendar is mandatory so that
-        arbitrary zone exits (shopping etc.) never count: only a running
-        calendar event whose title does NOT match any of the probe keywords
-        qualifies.  Without keywords every active event is a probe, so there is
-        nothing "other" to track (no double counting).
+        Only when the toggle is on and probe keywords are configured (without
+        keywords every event is a probe → nothing "other", no double counting).
+        If several qualify, the one ending latest is returned (the appointment
+        actually being attended).
         """
         if not self.get_cfg(CONF_TRACK_OTHER_ABSENCE, False):
-            return False
-
-        cal_entity = self.get_cfg(CONF_PROBE_CALENDAR, "")
-        if not cal_entity:
-            return False
-
-        cal_state = self.hass.states.get(cal_entity)
-        if not cal_state or cal_state.state != "on":
-            return False
-
-        keywords_raw = self.get_cfg(CONF_PROBE_KEYWORDS, "")
-        keywords = [kw.strip().lower() for kw in keywords_raw.split(",") if kw.strip()]
+            return None
+        if not events:
+            return None
+        keywords = self._configured_keywords()
         if not keywords:
-            return False
-
-        event_summary = (cal_state.attributes.get("message") or "").lower()
-        # "Other" = active event that is NOT a training (no keyword match).
-        return not any(kw in event_summary for kw in keywords)
+            return None
+        others = [
+            ev for ev in events if not self._matches_probe_keyword(ev["summary"], keywords)
+        ]
+        if not others:
+            return None
+        # Prefer the appointment ending latest; unknown ends sort first.
+        return max(
+            others,
+            key=lambda ev: (ev.get("end_ts") is not None, ev.get("end_ts") or 0),
+        )
 
     def _is_day_time_probe_active(self, now: datetime) -> bool:
         """Check if day & time based probe window is active."""
@@ -273,27 +386,31 @@ class FeuerwehrCoordinator:
         probe_count_end = self.get_cfg(CONF_PROBE_COUNT_END, "23:00")
         return _is_probe_weekday(now, probe_weekday) and _in_time_window(now, probe_count_start, probe_count_end)
 
-    def _is_probe_active(self, now: datetime) -> bool:
-        """Check if probe tracking should be active based on configured mode."""
+    def _is_probe_active_from(
+        self, now: datetime, events: list[dict[str, Any]]
+    ) -> bool:
+        """Probe tracking active? (day&time part sync, calendar part from events)."""
         mode = self.get_cfg(CONF_PROBE_MODE, PROBE_MODE_DAY_TIME)
 
         if mode == PROBE_MODE_DAY_TIME:
             return self._is_day_time_probe_active(now)
         elif mode == PROBE_MODE_CALENDAR:
-            return self._is_probe_calendar_active()
+            return self._probe_calendar_active_from(events)
         else:  # BOTH – either condition triggers probe
-            return self._is_day_time_probe_active(now) or self._is_probe_calendar_active()
+            return self._is_day_time_probe_active(now) or self._probe_calendar_active_from(events)
 
-    def _is_probe_count_active(self, now: datetime) -> bool:
-        """Check if probe minute counting (in-zone) should be active."""
+    def _is_probe_count_active_from(
+        self, now: datetime, events: list[dict[str, Any]]
+    ) -> bool:
+        """Probe minute counting (in-zone) active? (calendar part from events)."""
         mode = self.get_cfg(CONF_PROBE_MODE, PROBE_MODE_DAY_TIME)
 
         if mode == PROBE_MODE_DAY_TIME:
             return self._is_day_time_probe_count_active(now)
         elif mode == PROBE_MODE_CALENDAR:
-            return self._is_probe_calendar_active()
+            return self._probe_calendar_active_from(events)
         else:  # BOTH – either condition triggers counting
-            return self._is_day_time_probe_count_active(now) or self._is_probe_calendar_active()
+            return self._is_day_time_probe_count_active(now) or self._probe_calendar_active_from(events)
 
     # ------------------------------------------------------------------
     # Setup / Teardown
@@ -353,8 +470,7 @@ class FeuerwehrCoordinator:
     # Zone change handler
     # ------------------------------------------------------------------
 
-    @callback
-    def _handle_person_state_change(self, event: Event) -> None:
+    async def _handle_person_state_change(self, event: Event) -> None:
         """React to person entity state changes (zone enter/leave)."""
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
@@ -371,11 +487,11 @@ class FeuerwehrCoordinator:
 
         # --- LEAVING zone ---
         if old_in_zone and not new_in_zone:
-            self._on_zone_leave(now, alarm)
+            await self._on_zone_leave(now, alarm)
 
         # --- ENTERING zone ---
         if not old_in_zone and new_in_zone:
-            self._on_zone_enter(now)
+            await self._on_zone_enter(now)
 
     @callback
     def _handle_alarm_state_change(self, event: Event) -> None:
@@ -472,32 +588,43 @@ class FeuerwehrCoordinator:
         self.hass.async_create_task(self._async_save())
         self._maybe_notify_count(subcat, increments)
 
-    def _on_zone_leave(self, now: datetime, alarm_entity: str) -> None:
+    async def _on_zone_leave(self, now: datetime, alarm_entity: str) -> None:
         """Handle zone leave: set start timestamps if conditions match."""
         alarm_state = self.hass.states.get(alarm_entity)
         alarm_on = alarm_state and alarm_state.state == "on"
+        events = await self._async_active_calendar_events(now)
 
         # Priority: Einsatz (alarm) > Probe > sonstiger Termin (calendar).
-        # Mutually exclusive: in calendar mode _is_probe_active already checks
-        # the keyword match, so a keyword event is a probe and a non-keyword
-        # event is "other" – never both.
+        # Mutually exclusive: in calendar mode the probe check already tests the
+        # keyword match, so a keyword event is a probe and a non-keyword event is
+        # "other" – never both.
         if alarm_on:
             self._data[DATA_EINSATZ_STARTED] = now.timestamp()
             _LOGGER.info("Einsatz started at %s", now)
-        elif self._is_probe_active(now):
+        elif self._is_probe_active_from(now, events):
             self._data[DATA_PROBE_STARTED] = now.timestamp()
             _LOGGER.info("Probe absence started at %s", now)
-        elif self._is_other_appointment_active():
-            self._data[DATA_SONSTIGES_STARTED] = now.timestamp()
-            _LOGGER.info("Sonstiges appointment absence started at %s", now)
+        else:
+            other = self._get_other_appointment_from(events)
+            if other is not None:
+                self._data[DATA_SONSTIGES_STARTED] = now.timestamp()
+                # Remember the appointment's end so the return-side grace window
+                # (CONF_SONSTIGES_GRACE_HOURS) can decide whether to still count it.
+                self._data[DATA_SONSTIGES_END] = other.get("end_ts")
+                _LOGGER.info(
+                    "Sonstiges appointment absence started at %s (ends %s)",
+                    now,
+                    other.get("end_ts"),
+                )
 
         self.hass.async_create_task(self._async_save())
 
-    def _on_zone_enter(self, now: datetime) -> None:
+    async def _on_zone_enter(self, now: datetime) -> None:
         """Handle zone enter: calculate and add minutes if applicable."""
         einsatz_max = self.get_cfg(CONF_EINSATZ_MAX_HOURS, 10)
         probe_max = self.get_cfg(CONF_PROBE_MAX_HOURS, 6)
-        sonstiges_max = self.get_cfg(CONF_SONSTIGES_MAX_HOURS, 6)
+        sonstiges_grace = self.get_cfg(CONF_SONSTIGES_GRACE_HOURS, 1)
+        events = await self._async_active_calendar_events(now)
         alarm_entity = self.get_cfg(CONF_ALARM, "")
         alarm_state = self.hass.states.get(alarm_entity)
         alarm_on = alarm_state and alarm_state.state == "on"
@@ -531,7 +658,7 @@ class FeuerwehrCoordinator:
         # --- Probe (absence tracking) ---
         probe_started = self._data.get(DATA_PROBE_STARTED)
 
-        if probe_started and self._is_probe_active(now):
+        if probe_started and self._is_probe_active_from(now, events):
             # Only count if timestamp is from today (day-boundary protection –
             # a probe must not run over night).
             started_dt = datetime.fromtimestamp(probe_started, tz=now.tzinfo)
@@ -558,12 +685,20 @@ class FeuerwehrCoordinator:
         sonstiges_started = self._data.get(DATA_SONSTIGES_STARTED)
         if sonstiges_started:
             # NO day-boundary check: an appointment may run past midnight.
-            # The event no longer needs to be active on return (appointments end).
+            # The appointment must, however, still be running on return OR have
+            # ended at most CONF_SONSTIGES_GRACE_HOURS ago – otherwise the whole
+            # absence is discarded (you went home long after the appointment).
+            still_active = self._get_other_appointment_from(events) is not None
+            end_ts = self._data.get(DATA_SONSTIGES_END)
+            within_grace = (
+                end_ts is not None
+                and (now.timestamp() - end_ts) <= sonstiges_grace * 3600
+            )
             elapsed = now.timestamp() - sonstiges_started
-            # Discard (not cap) an absence that exceeds sonstiges_max hours: a
-            # 20h "appointment" is really "went home overnight", so crediting
-            # the capped maximum would add phantom hours (mirrors Einsatz).
-            if 0 < elapsed <= sonstiges_max * 3600:
+            # The grace window is the sole validity guard: a "20h appointment" is
+            # really "went home overnight" – by then the event ended well beyond
+            # the grace window (or is no longer active), so it is discarded here.
+            if (still_active or within_grace) and elapsed > 0:
                 delta = int(elapsed / 60)
                 self._data[DATA_SONSTIGES_MINUTES] = (
                     int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) + delta
@@ -575,7 +710,15 @@ class FeuerwehrCoordinator:
                     category="sonstiges",
                     delta_minutes=delta,
                 )
+            else:
+                _LOGGER.info(
+                    "Sonstiges appointment discarded (active=%s, within_grace=%s, elapsed=%ds)",
+                    still_active,
+                    within_grace,
+                    int(elapsed),
+                )
             self._data[DATA_SONSTIGES_STARTED] = None
+            self._data[DATA_SONSTIGES_END] = None
 
         self._notify_sensors()
         self.hass.async_create_task(self._async_save())
@@ -584,8 +727,7 @@ class FeuerwehrCoordinator:
     # Per-minute tick (zone presence counting)
     # ------------------------------------------------------------------
 
-    @callback
-    def _handle_minute_tick(self, _now: datetime) -> None:
+    async def _handle_minute_tick(self, _now: datetime) -> None:
         """Every minute: if person is in zone, increment appropriate counter."""
         now = dt_util.now()
 
@@ -601,6 +743,7 @@ class FeuerwehrCoordinator:
 
         person_state = self.hass.states.get(person)
         if not person_state or person_state.state != zone:
+            # Not in the zone → no calendar read needed (0 get_events calls).
             return
 
         alarm_state = self.hass.states.get(alarm)
@@ -615,7 +758,7 @@ class FeuerwehrCoordinator:
             self._data[DATA_ALARM_AT_STATION] = True
             _LOGGER.debug("Einsatz minute tick (in zone): total=%d", self._data[DATA_EINSATZ_MINUTES])
         # Probe counting: check based on configured mode
-        elif self._is_probe_count_active(now):
+        elif self._is_probe_count_active_from(now, await self._async_active_calendar_events(now)):
             self._data[DATA_PROBE_MINUTES] = int(self._data.get(DATA_PROBE_MINUTES, 0)) + 1
             _LOGGER.debug("Probe minute tick: total=%d", self._data[DATA_PROBE_MINUTES])
         else:
