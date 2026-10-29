@@ -67,7 +67,11 @@
         "data": {
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
-          "notify_service": "Notify service (optional, e.g. notify.mobile_app_iphone)"
+          "notify_service": "Notify service (optional, e.g. notify.mobile_app_iphone)",
+          "notify_events": "Notifications (multi-select)"
+        },
+        "data_description": {
+          "notify_events": "Freely combinable; nothing selected = no push. For both immediate options (outside events, fire-station presence) the added time can be reset by long-pressing the notification. The end-of-day summary (23:59, from 5 min) is info only and cannot be reset."
         }
       }
     },
@@ -102,7 +106,11 @@
           "probe_count_end": "Minute counter end",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
-          "notify_service": "Notify service (optional)"
+          "notify_service": "Notify service (optional)",
+          "notify_events": "Notifications (multi-select)"
+        },
+        "data_description": {
+          "notify_events": "Freely combinable; nothing selected = no push. For both immediate options (outside events, fire-station presence) the added time can be reset by long-pressing the notification. The end-of-day summary (23:59, from 5 min) is info only and cannot be reset."
         }
       },
       "options_calendar": {
@@ -118,7 +126,11 @@
           "ignore_allday_events": "Ignore all-day events (short events running during them are still detected)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
-          "notify_service": "Notify service (optional)"
+          "notify_service": "Notify service (optional)",
+          "notify_events": "Notifications (multi-select)"
+        },
+        "data_description": {
+          "notify_events": "Freely combinable; nothing selected = no push. For both immediate options (outside events, fire-station presence) the added time can be reset by long-pressing the notification. The end-of-day summary (23:59, from 5 min) is info only and cannot be reset."
         }
       },
       "options_both": {
@@ -139,7 +151,11 @@
           "ignore_allday_events": "Ignore all-day events (short events running during them are still detected)",
           "einsatz_max_hours": "Max. deployment duration (hours)",
           "probe_max_hours": "Max. training duration (hours)",
-          "notify_service": "Notify service (optional)"
+          "notify_service": "Notify service (optional)",
+          "notify_events": "Notifications (multi-select)"
+        },
+        "data_description": {
+          "notify_events": "Freely combinable; nothing selected = no push. For both immediate options (outside events, fire-station presence) the added time can be reset by long-pressing the notification. The end-of-day summary (23:59, from 5 min) is info only and cannot be reset."
         }
       }
     }

@@ -67,7 +67,11 @@
         "data": {
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "probe_max_hours": "Max. Probedauer (Stunden)",
-          "notify_service": "Notify Service (optional, z.B. notify.mobile_app_iphone)"
+          "notify_service": "Notify Service (optional, z.B. notify.mobile_app_iphone)",
+          "notify_events": "Benachrichtigungen (Mehrfachauswahl)"
+        },
+        "data_description": {
+          "notify_events": "Frei kombinierbar; nichts ausgewählt = keine Push. Bei beiden Sofort-Varianten (Außerhalb-Ereignisse, Gerätehaus-Aufenthalte) lässt sich die addierte Zeit per Long-Press auf die Benachrichtigung zurücksetzen. Die Tagesende-Zusammenfassung (23:59, ab 5 min) ist reine Info ohne Zurücksetzen."
         }
       }
     },
@@ -102,7 +106,11 @@
           "probe_count_end": "Minuten-Zähler Ende",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "probe_max_hours": "Max. Probedauer (Stunden)",
-          "notify_service": "Notify Service (optional)"
+          "notify_service": "Notify Service (optional)",
+          "notify_events": "Benachrichtigungen (Mehrfachauswahl)"
+        },
+        "data_description": {
+          "notify_events": "Frei kombinierbar; nichts ausgewählt = keine Push. Bei beiden Sofort-Varianten (Außerhalb-Ereignisse, Gerätehaus-Aufenthalte) lässt sich die addierte Zeit per Long-Press auf die Benachrichtigung zurücksetzen. Die Tagesende-Zusammenfassung (23:59, ab 5 min) ist reine Info ohne Zurücksetzen."
         }
       },
       "options_calendar": {
@@ -118,7 +126,11 @@
           "ignore_allday_events": "Ganztägige Termine ignorieren (kurze Termine, die währenddessen laufen, werden trotzdem erkannt)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "probe_max_hours": "Max. Probedauer (Stunden)",
-          "notify_service": "Notify Service (optional)"
+          "notify_service": "Notify Service (optional)",
+          "notify_events": "Benachrichtigungen (Mehrfachauswahl)"
+        },
+        "data_description": {
+          "notify_events": "Frei kombinierbar; nichts ausgewählt = keine Push. Bei beiden Sofort-Varianten (Außerhalb-Ereignisse, Gerätehaus-Aufenthalte) lässt sich die addierte Zeit per Long-Press auf die Benachrichtigung zurücksetzen. Die Tagesende-Zusammenfassung (23:59, ab 5 min) ist reine Info ohne Zurücksetzen."
         }
       },
       "options_both": {
@@ -139,7 +151,11 @@
           "ignore_allday_events": "Ganztägige Termine ignorieren (kurze Termine, die währenddessen laufen, werden trotzdem erkannt)",
           "einsatz_max_hours": "Max. Einsatzdauer (Stunden)",
           "probe_max_hours": "Max. Probedauer (Stunden)",
-          "notify_service": "Notify Service (optional)"
+          "notify_service": "Notify Service (optional)",
+          "notify_events": "Benachrichtigungen (Mehrfachauswahl)"
+        },
+        "data_description": {
+          "notify_events": "Frei kombinierbar; nichts ausgewählt = keine Push. Bei beiden Sofort-Varianten (Außerhalb-Ereignisse, Gerätehaus-Aufenthalte) lässt sich die addierte Zeit per Long-Press auf die Benachrichtigung zurücksetzen. Die Tagesende-Zusammenfassung (23:59, ab 5 min) ist reine Info ohne Zurücksetzen."
         }
       }
     }

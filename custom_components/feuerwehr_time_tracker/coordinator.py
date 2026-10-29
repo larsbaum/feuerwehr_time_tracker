@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant, callback, Event
 from homeassistant.helpers.event import (
     async_track_state_change_event,
+    async_track_time_change,
     async_track_time_interval,
 )
 from homeassistant.helpers.storage import Store
@@ -37,6 +38,16 @@ from .const import (
     CONF_SONSTIGES_GRACE_HOURS,
     CONF_IGNORE_ALLDAY,
     CONF_NOTIFY_SERVICE,
+    CONF_NOTIFY_EVENTS,
+    NOTIFY_EVENT_OUTSIDE,
+    NOTIFY_EVENT_STATION,
+    NOTIFY_EVENT_DAILY,
+    DEFAULT_NOTIFY_EVENTS,
+    DAILY_SUMMARY_MIN_MINUTES,
+    DATA_STATION_SESSION,
+    DATA_TODAY_MINUTES,
+    DATA_TODAY_DATE,
+    DATA_DAILY_LAST_SENT,
     DATA_EINSATZ_MINUTES,
     DATA_PROBE_MINUTES,
     DATA_SONSTIGES_MINUTES,
@@ -141,11 +152,16 @@ class FeuerwehrCoordinator:
             DATA_COUNT_STANDBY: 0,
             DATA_ALARM_RESPONDED: False,
             DATA_ALARM_AT_STATION: False,
+            DATA_STATION_SESSION: {},
+            DATA_TODAY_MINUTES: {},
+            DATA_TODAY_DATE: None,
+            DATA_DAILY_LAST_SENT: None,
         }
 
         self._unsub_zone = None
         self._unsub_timer = None
         self._unsub_alarm = None
+        self._unsub_daily = None
         self._listeners: list[callback] = []
         self._rollover_in_progress = False
         # Short-lived cache for calendar.get_events results (monotonic ts, events).
@@ -443,6 +459,12 @@ class FeuerwehrCoordinator:
         self._unsub_timer = async_track_time_interval(
             self.hass, self._handle_minute_tick, timedelta(minutes=1)
         )
+        # Daily summary: fire one minute before midnight (local time).
+        self._unsub_daily = async_track_time_change(
+            self.hass, self._handle_daily_summary_time, hour=23, minute=59, second=0
+        )
+        # If HA was offline across a 23:59 with a qualifying day, catch up now.
+        self._maybe_send_daily_catchup()
 
         # Listen for the alarm sensor leaving the "on" state. This lets us
         # discard a pending einsatz_started as soon as the triggering alarm
@@ -463,6 +485,8 @@ class FeuerwehrCoordinator:
             self._unsub_timer()
         if self._unsub_alarm:
             self._unsub_alarm()
+        if self._unsub_daily:
+            self._unsub_daily()
         await self._store.async_save(self._data)
         _LOGGER.info("Feuerwehr Zeit-Tracker coordinator stopped.")
 
@@ -590,6 +614,9 @@ class FeuerwehrCoordinator:
 
     async def _on_zone_leave(self, now: datetime, alarm_entity: str) -> None:
         """Handle zone leave: set start timestamps if conditions match."""
+        # A continuous presence (Gerätehaus-Aufenthalt) just ended → flush it.
+        self._flush_station_session()
+
         alarm_state = self.hass.states.get(alarm_entity)
         alarm_on = alarm_state and alarm_state.state == "on"
         events = await self._async_active_calendar_events(now)
@@ -641,15 +668,17 @@ class FeuerwehrCoordinator:
                         int(self._data.get(DATA_EINSATZ_MINUTES, 0)) + delta
                     )
                     _LOGGER.info("Einsatz: added %d min (total: %d min)", delta, self._data[DATA_EINSATZ_MINUTES])
+                    self._add_today("einsatz", delta)
                     # Minutes were added on return during an active alarm → the
                     # member turned out ("abgerückt") for this alarm.
                     self._data[DATA_ALARM_RESPONDED] = True
-                    self._maybe_notify(
-                        "🚒 Einsatz beendet",
-                        f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_EINSATZ_MINUTES])}",
-                        category="einsatz",
-                        delta_minutes=delta,
-                    )
+                    if self._notify_enabled(NOTIFY_EVENT_OUTSIDE):
+                        self._maybe_notify(
+                            "🚒 Einsatz beendet",
+                            f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_EINSATZ_MINUTES])}",
+                            category="einsatz",
+                            delta_minutes=delta,
+                        )
             else:
                 _LOGGER.info("Einsatz: alarm no longer active, discarding %d sec absence",
                              int(now.timestamp() - einsatz_started))
@@ -673,12 +702,14 @@ class FeuerwehrCoordinator:
                         int(self._data.get(DATA_PROBE_MINUTES, 0)) + delta
                     )
                     _LOGGER.info("Probe absence: added %d min (total: %d min)", delta, self._data[DATA_PROBE_MINUTES])
-                    self._maybe_notify(
-                        "🧑‍🚒 Probe beendet",
-                        f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_PROBE_MINUTES])}",
-                        category="probe",
-                        delta_minutes=delta,
-                    )
+                    self._add_today("probe", delta)
+                    if self._notify_enabled(NOTIFY_EVENT_OUTSIDE):
+                        self._maybe_notify(
+                            "🧑‍🚒 Probe beendet",
+                            f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_PROBE_MINUTES])}",
+                            category="probe",
+                            delta_minutes=delta,
+                        )
             self._data[DATA_PROBE_STARTED] = None
 
         # --- Sonstiges (appointment absence tracking) ---
@@ -704,12 +735,14 @@ class FeuerwehrCoordinator:
                     int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) + delta
                 )
                 _LOGGER.info("Sonstiges appointment: added %d min (total: %d min)", delta, self._data[DATA_SONSTIGES_MINUTES])
-                self._maybe_notify(
-                    "🧰 Termin beendet",
-                    f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_SONSTIGES_MINUTES])}",
-                    category="sonstiges",
-                    delta_minutes=delta,
-                )
+                self._add_today("sonstiges", delta)
+                if self._notify_enabled(NOTIFY_EVENT_OUTSIDE):
+                    self._maybe_notify(
+                        "🧰 Termin beendet",
+                        f"{_format_duration(delta)} addiert – Gesamt: {_format_duration(self._data[DATA_SONSTIGES_MINUTES])}",
+                        category="sonstiges",
+                        delta_minutes=delta,
+                    )
             else:
                 _LOGGER.info(
                     "Sonstiges appointment discarded (active=%s, within_grace=%s, elapsed=%ds)",
@@ -756,14 +789,17 @@ class FeuerwehrCoordinator:
             # "Bereitschaft" candidate (used at finalize unless the member also
             # turned out, which takes priority).
             self._data[DATA_ALARM_AT_STATION] = True
+            self._track_station_minute("einsatz")
             _LOGGER.debug("Einsatz minute tick (in zone): total=%d", self._data[DATA_EINSATZ_MINUTES])
         # Probe counting: check based on configured mode
         elif self._is_probe_count_active_from(now, await self._async_active_calendar_events(now)):
             self._data[DATA_PROBE_MINUTES] = int(self._data.get(DATA_PROBE_MINUTES, 0)) + 1
+            self._track_station_minute("probe")
             _LOGGER.debug("Probe minute tick: total=%d", self._data[DATA_PROBE_MINUTES])
         else:
             # Sonstiges counting
             self._data[DATA_SONSTIGES_MINUTES] = int(self._data.get(DATA_SONSTIGES_MINUTES, 0)) + 1
+            self._track_station_minute("sonstiges")
             _LOGGER.debug("Sonstiges minute tick: total=%d", self._data[DATA_SONSTIGES_MINUTES])
 
         self._notify_sensors()
@@ -917,6 +953,127 @@ class FeuerwehrCoordinator:
             cb()
 
     # ------------------------------------------------------------------
+    # Notification mode + accumulators
+    # ------------------------------------------------------------------
+
+    def _notify_enabled(self, event: str) -> bool:
+        """Whether the given notify-event switch is active in the config.
+
+        The option is a multi-select list; a missing value falls back to the
+        default (OUTSIDE only = the behaviour before the option existed).
+        """
+        events = self.get_cfg(CONF_NOTIFY_EVENTS, DEFAULT_NOTIFY_EVENTS)
+        if not isinstance(events, (list, tuple, set)):
+            events = DEFAULT_NOTIFY_EVENTS
+        return event in events
+
+    def _add_today(self, category: str, delta: int) -> None:
+        """Add to today's per-category gain (for the 23:59 summary).
+
+        Lazily rolls the day over: the first accrual on a new calendar day
+        resets the per-category buckets and stamps the new date. Tracked
+        unconditionally (cheap) so toggling the daily switch on mid-day still
+        yields a correct summary.
+        """
+        today = dt_util.now().date().isoformat()
+        if self._data.get(DATA_TODAY_DATE) != today:
+            self._data[DATA_TODAY_DATE] = today
+            self._data[DATA_TODAY_MINUTES] = {}
+        bucket = self._data.setdefault(DATA_TODAY_MINUTES, {})
+        bucket[category] = int(bucket.get(category, 0)) + int(delta)
+
+    def _track_station_minute(self, category: str) -> None:
+        """Account one in-zone minute: today's gain + current-presence session."""
+        self._add_today(category, 1)
+        session = self._data.setdefault(DATA_STATION_SESSION, {})
+        session[category] = int(session.get(category, 0)) + 1
+
+    def _flush_station_session(self) -> None:
+        """End the current Gerätehaus presence: notify its minutes, then reset.
+
+        One push per category that gained minutes during this presence, each
+        with an undo button (same mechanism as the outside-event notifications).
+        The session is always reset, even when the STATION switch is off, so a
+        later presence never inherits stale minutes.
+        """
+        session = self._data.get(DATA_STATION_SESSION) or {}
+        self._data[DATA_STATION_SESSION] = {}
+
+        if self._notify_enabled(NOTIFY_EVENT_STATION):
+            for category in ("einsatz", "probe", "sonstiges"):
+                minutes = int(session.get(category, 0))
+                if minutes <= 0:
+                    continue
+                label = CATEGORY_LABELS.get(category, category)
+                total = int(self._data.get(f"{category}_minutes", 0))
+                self._maybe_notify(
+                    "🏠 Gerätehaus-Aufenthalt",
+                    f"{label}: {_format_duration(minutes)} addiert – "
+                    f"Gesamt: {_format_duration(total)}",
+                    category=category,
+                    delta_minutes=minutes,
+                )
+
+        self.hass.async_create_task(self._async_save())
+
+    @callback
+    def _handle_daily_summary_time(self, now: datetime) -> None:
+        """Scheduled 23:59 trigger → send today's summary if it qualifies."""
+        self._send_daily_summary(dt_util.now())
+
+    def _send_daily_summary(self, now: datetime, date_str: str | None = None) -> None:
+        """Send the day's summary push, if enabled and above the threshold.
+
+        ``date_str`` defaults to today; the startup catch-up passes the stored
+        (past) day instead. Guards: daily switch on, the buckets belong to that
+        day, not already sent for that day, and the day's total gain reaches
+        ``DAILY_SUMMARY_MIN_MINUTES``. A summary is plain info – no undo buttons.
+        """
+        if not self._notify_enabled(NOTIFY_EVENT_DAILY):
+            return
+        day = date_str or now.date().isoformat()
+        if self._data.get(DATA_TODAY_DATE) != day:
+            return
+        if self._data.get(DATA_DAILY_LAST_SENT) == day:
+            return
+
+        buckets = self._data.get(DATA_TODAY_MINUTES) or {}
+        total = sum(int(v) for v in buckets.values())
+        if total < DAILY_SUMMARY_MIN_MINUTES:
+            return
+
+        parts = [
+            f"{CATEGORY_LABELS[category]}: {_format_duration(int(buckets.get(category, 0)))}"
+            for category in ("einsatz", "probe", "sonstiges")
+            if int(buckets.get(category, 0)) > 0
+        ]
+        message = " · ".join(parts) + f" — Gesamt: {_format_duration(total)}"
+
+        self._data[DATA_DAILY_LAST_SENT] = day
+        self.hass.async_create_task(self._async_save())
+        self._notify_raw(
+            "📊 Feuerwehr Tagesbericht",
+            message,
+            tag=f"{NOTIFY_TAG_PREFIX}daily_{day}",
+        )
+        _LOGGER.info("Daily summary sent for %s: %s", day, message)
+
+    def _maybe_send_daily_catchup(self) -> None:
+        """On startup: send a missed summary if HA was offline across 23:59.
+
+        Only fires for a *past* stored day (today's summary still fires at 23:59
+        normally). The last-sent guard inside _send_daily_summary prevents dupes.
+        """
+        if not self._notify_enabled(NOTIFY_EVENT_DAILY):
+            return
+        day = self._data.get(DATA_TODAY_DATE)
+        if not day:
+            return
+        if day >= dt_util.now().date().isoformat():
+            return
+        self._send_daily_summary(dt_util.now(), date_str=day)
+
+    # ------------------------------------------------------------------
     # Notifications
     # ------------------------------------------------------------------
 
@@ -1006,6 +1163,8 @@ class FeuerwehrCoordinator:
         The notification offers the two other classifications and a delete
         button (see :meth:`_build_count_actions`).
         """
+        if not self._notify_enabled(NOTIFY_EVENT_OUTSIDE):
+            return
         notify_service = self.get_cfg(CONF_NOTIFY_SERVICE, "")
         if not notify_service:
             return

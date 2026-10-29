@@ -33,6 +33,29 @@ CONF_SONSTIGES_GRACE_HOURS = "sonstiges_grace_hours"
 # events running underneath an all-day event are still detected).
 CONF_IGNORE_ALLDAY = "ignore_allday_events"
 CONF_NOTIFY_SERVICE = "notify_service"
+# Which notification events are active. Multi-select (list of the tokens below);
+# an empty list means "no push notifications at all". Defaults to OUTSIDE only,
+# which is exactly the behaviour before this option existed (backwards compatible).
+CONF_NOTIFY_EVENTS = "notify_events"
+
+# Notify-event tokens (independent, freely combinable switches).
+NOTIFY_EVENT_OUTSIDE = "outside"   # per Einsatz/Probe/Termin außerhalb (+ Einsatzzählung), mit Undo
+NOTIFY_EVENT_STATION = "station"   # eine Push pro Gerätehaus-Aufenthalt (beim Verlassen), mit Undo
+NOTIFY_EVENT_DAILY = "daily"       # Sammel-Push um 23:59, reine Info ohne Undo
+DEFAULT_NOTIFY_EVENTS = [NOTIFY_EVENT_OUTSIDE]
+
+# Labels shown directly in the config multi-select. They also spell out, per
+# switch, whether the added time can be reset via long-press – so the user sees
+# the difference while configuring (OUTSIDE/STATION = yes, DAILY = no).
+NOTIFY_EVENT_LABELS = {
+    NOTIFY_EVENT_OUTSIDE: "Außerhalb-Ereignisse – sofort (Zurücksetzen per Long-Press)",
+    NOTIFY_EVENT_STATION: "Gerätehaus-Aufenthalte – sofort (Zurücksetzen per Long-Press)",
+    NOTIFY_EVENT_DAILY: "Tagesende 23:59 – Zusammenfassung (reine Info, kein Zurücksetzen)",
+}
+
+# A day's summary is only sent once the day's tracked gain reaches this many
+# minutes – so single stray minutes never trigger a push.
+DAILY_SUMMARY_MIN_MINUTES = 5
 
 # Probe mode choices
 PROBE_MODE_DAY_TIME = "day_time"
@@ -54,6 +77,15 @@ DATA_SONSTIGES_END = "sonstiges_end"       # timestamp float or None (appointmen
 DATA_CURRENT_YEAR = "current_year"         # int or None (year the counters belong to)
 DATA_PREVIOUS_YEARS = "previous_years"     # dict[str, dict[str, int]] archived totals
 DATA_PENDING_UNDOS = "pending_undos"       # dict[token, {category, minutes, created}]
+
+# Gerätehaus-Aufenthalt: minutes counted during the current, uninterrupted zone
+# presence, per category. Reset on zone enter, flushed (and notified) on leave.
+DATA_STATION_SESSION = "station_session"   # dict[category, int]
+# Tagesende-Zusammenfassung: minutes tracked *today* per category, plus the date
+# they belong to and the date a summary was last sent (restart catch-up guard).
+DATA_TODAY_MINUTES = "today_minutes"       # dict[category, int]
+DATA_TODAY_DATE = "today_date"             # ISO date str (YYYY-MM-DD) or None
+DATA_DAILY_LAST_SENT = "daily_last_sent"   # ISO date str or None
 
 # Mission counters (Einsatzzahlen) – incremented when the alarm sensor turns off.
 DATA_COUNT_TOTAL = "einsatz_count_total"           # every alarm

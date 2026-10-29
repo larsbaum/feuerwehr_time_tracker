@@ -11,6 +11,26 @@ sinnvoll für eine HACS-Integration.
 > (`git tag`) einsehbar, die Commit-Messages sind dort allerdings größtenteils
 > unspezifisch ("bugfix").
 
+## [Unreleased]
+
+### Neu – Wählbare Benachrichtigungs-Varianten
+- **Mehrfachauswahl „Benachrichtigungen"** in der Einrichtung/Optionen (Schritt
+  „Einsatz & Benachrichtigungen"). Drei unabhängig anhakbare Varianten:
+  - **Außerhalb-Ereignisse (sofort)** – pro Einsatz/Probe/Termin außerhalb beim
+    Zurückkommen, inkl. Einsatzzählung, mit **Zurücksetzen per Long-Press**. Das ist
+    das bisherige Verhalten und die Standard-Auswahl – bestehende Installationen
+    ändern sich nicht.
+  - **Gerätehaus-Aufenthalte (sofort)** – eine Meldung beim Verlassen der Zone mit
+    den gesammelten Minuten des Aufenthalts, ebenfalls mit **Zurücksetzen per
+    Long-Press**.
+  - **Tagesende-Zusammenfassung** – einmal um **23:59** mit Aufschlüsselung je
+    Kategorie + Gesamt, nur wenn der Tages-Zuwachs **≥ 5 Minuten** ist (einzelne
+    Minutensprünge lösen also keine Meldung aus). Reine Info **ohne** Zurücksetzen.
+    War Home Assistant um 23:59 offline, wird die verpasste Zusammenfassung beim
+    nächsten Start nachgeholt.
+- Nichts ausgewählt = keine Push-Benachrichtigungen. Welche Varianten rücksetzbar
+  sind, steht direkt als Hinweis unter dem Auswahlfeld in der Konfiguration.
+
 ## [0.3.1] - 2026-07-25
 
 > ⚠️ **Vor dem Update lesen:** Kommst du von einer Version **vor 0.3.0**, lies vor

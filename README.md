@@ -141,8 +141,9 @@ ___
 - Keine manuellen Automationen nötig
 - Vollständig über die HA-Oberfläche konfigurierbar
 - Flexible Probe-Erkennung: fester Wochentag, Kalender oder beides
-- Optional: Push-Benachrichtigung bei Einsatzende / Probe-Ende – inkl.
-  „X.Xh zurücksetzen"-Button direkt in der iOS-Benachrichtigung
+- Optional: Push-Benachrichtigungen, frei kombinierbar – sofort pro Ereignis
+  (inkl. „X.Xh zurücksetzen"-Button), pro Gerätehaus-Aufenthalt und/oder als
+  Tagesende-Zusammenfassung um 23:59
 - Einsatzzahlen (Anzahl der Alarme: gesamt / abgerückt / Bereitschaft) als separate
   Diagnose-Sensoren – inkl. Umklassifizieren-/Löschen-Buttons in der Benachrichtigung
 - Services zum Zurücksetzen oder manuellen Korrigieren (Stunden **und** Einsatzzahlen)
@@ -210,10 +211,26 @@ ___
 | Max. Einsatzdauer | Zeitfenster für gültige Rückkehr (Stunden) | `10` |
 | Max. Probedauer | Gültigkeitsgrenze der Proben-Abwesenheit (darüber wird verworfen, nicht gekappt) | `6` |
 | Notify Service | z.B. `notify.mobile_app_iphone` (leer = keine Benachrichtigung) | – |
+| Benachrichtigungen | Mehrfachauswahl, welche Pushes gesendet werden (siehe unten) | `Außerhalb-Ereignisse` |
+
+#### Benachrichtigungs-Varianten (frei kombinierbar)
+Die Mehrfachauswahl steuert, *wann* gepusht wird – unabhängig voneinander anhakbar.
+Nichts ausgewählt = keine Push. Ohne gesetzten Notify-Service passiert generell nichts.
+
+| Variante | Wann | Zurücksetzen per Long-Press? |
+|----------|------|------------------------------|
+| **Außerhalb-Ereignisse (sofort)** | Pro Einsatz/Probe/Termin außerhalb beim Zurückkommen, inkl. Einsatzzählung | **Ja** |
+| **Gerätehaus-Aufenthalte (sofort)** | Eine Meldung beim Verlassen der Zone mit den gesammelten Minuten des Aufenthalts | **Ja** |
+| **Tagesende-Zusammenfassung** | Einmal um **23:59** mit Aufschlüsselung je Kategorie + Gesamt, nur wenn der Tages-Zuwachs **≥ 5 min** ist | **Nein** (reine Info) |
+
+> Beispiel: „Außerhalb-Ereignisse" + „Tagesende-Zusammenfassung" → wie bisher sofort
+> pushen (zum Zurücksetzen) **und** abends eine Zusammenfassung. War Home Assistant um
+> 23:59 offline, wird die verpasste Zusammenfassung beim nächsten Start nachgeholt.
 
 > 💡 **Zeit direkt aus der Benachrichtigung zurücksetzen:** Ist ein
-> `notify.mobile_app_*`-Dienst hinterlegt, enthält jede Meldung nach einem
-> Einsatz/einer Probe/einem Termin einen Button **„X.Xh zurücksetzen"**. Long-Press
+> `notify.mobile_app_*`-Dienst hinterlegt, enthält jede Sofort-Meldung (nach einem
+> Einsatz/einer Probe/einem Termin außerhalb **oder** einem Gerätehaus-Aufenthalt)
+> einen Button **„X.Xh zurücksetzen"**. Long-Press
 > (bzw. Aktionen) auf die iOS-Benachrichtigung → der zuletzt für **diese** Meldung
 > addierte Wert wird wieder abgezogen; die Original-Meldung wird durch eine
 > Bestätigung ersetzt. Bei mehreren offenen Meldungen setzt jede den richtigen Wert

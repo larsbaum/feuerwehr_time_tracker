@@ -26,6 +26,9 @@ from .const import (
     CONF_SONSTIGES_GRACE_HOURS,
     CONF_IGNORE_ALLDAY,
     CONF_NOTIFY_SERVICE,
+    CONF_NOTIFY_EVENTS,
+    DEFAULT_NOTIFY_EVENTS,
+    NOTIFY_EVENT_LABELS,
     PROBE_MODE_DAY_TIME,
     PROBE_MODE_CALENDAR,
     PROBE_MODE_BOTH,
@@ -215,6 +218,9 @@ class FeuerwehrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_EINSATZ_MAX_HOURS, default=10): vol.All(int, vol.Range(min=1, max=24)),
             vol.Required(CONF_PROBE_MAX_HOURS, default=6): vol.All(int, vol.Range(min=1, max=24)),
             vol.Optional(CONF_NOTIFY_SERVICE, default=""): str,
+            vol.Optional(
+                CONF_NOTIFY_EVENTS, default=DEFAULT_NOTIFY_EVENTS
+            ): cv.multi_select(NOTIFY_EVENT_LABELS),
         })
 
         return self.async_show_form(
@@ -270,6 +276,10 @@ class FeuerwehrOptionsFlow(config_entries.OptionsFlow):
             vol.Required(CONF_EINSATZ_MAX_HOURS, default=current.get(CONF_EINSATZ_MAX_HOURS, 10)): vol.All(int, vol.Range(min=1, max=24)),
             vol.Required(CONF_PROBE_MAX_HOURS, default=current.get(CONF_PROBE_MAX_HOURS, 6)): vol.All(int, vol.Range(min=1, max=24)),
             vol.Optional(CONF_NOTIFY_SERVICE, default=current.get(CONF_NOTIFY_SERVICE, "")): str,
+            vol.Optional(
+                CONF_NOTIFY_EVENTS,
+                default=current.get(CONF_NOTIFY_EVENTS, DEFAULT_NOTIFY_EVENTS),
+            ): cv.multi_select(NOTIFY_EVENT_LABELS),
         }
 
     def _day_time_fields(self, current: dict) -> dict:
