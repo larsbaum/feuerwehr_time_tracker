@@ -11,7 +11,7 @@ sinnvoll für eine HACS-Integration.
 > (`git tag`) einsehbar, die Commit-Messages sind dort allerdings größtenteils
 > unspezifisch ("bugfix").
 
-## [Unreleased]
+## [0.4.0] - 2026-10-29
 
 ### Neu – Wählbare Benachrichtigungs-Varianten
 - **Mehrfachauswahl „Benachrichtigungen"** in der Einrichtung/Optionen (Schritt
