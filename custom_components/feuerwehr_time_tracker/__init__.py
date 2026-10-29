@@ -61,6 +61,12 @@ SERVICE_ADD_COUNT_SCHEMA = vol.Schema({
 })
 
 
+# This integration has no YAML configuration – it is set up from config entries
+# only (async_setup just registers the frontend card). Declaring the schema
+# satisfies hassfest and rejects stray YAML under the domain.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Register frontend card early, before any config entry loads."""
     hass.data.setdefault(DOMAIN, {})
