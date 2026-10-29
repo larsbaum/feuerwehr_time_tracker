@@ -11,6 +11,15 @@ sinnvoll für eine HACS-Integration.
 > (`git tag`) einsehbar, die Commit-Messages sind dort allerdings größtenteils
 > unspezifisch ("bugfix").
 
+## [0.4.1] - 2026-10-29
+
+### Behoben
+- **Integration wieder unter „Integrationen" sichtbar:** In 0.4.0 war durch
+  `integration_type: "helper"` die Integration in Home Assistant in den Reiter
+  **„Helfer"** gewandert und tauchte nicht mehr unter *Geräte & Dienste →
+  Integrationen* auf. Korrigiert auf `"hub"`. Reine Anzeige/Einordnung – der
+  Config-Eintrag und alle Zählerstände waren nie betroffen.
+
 ## [0.4.0] - 2026-10-29
 
 ### Neu – Wählbare Benachrichtigungs-Varianten
